@@ -240,9 +240,10 @@ export class PidFiles {
     this.enabled = this.#prepare();
     /** @type {Set<string>} */
     this.mine = new Set();
-    /** Pids whose command line is still being looked up; remove() drops them. */
-    /** @type {Set<number>} */
-    this.pending = new Set();
+    /** Pids whose command line is still being looked up, with the lookup's number; remove() drops them. */
+    /** @type {Map<number, number>} */
+    this.pending = new Map();
+    this.lookups = 0;
   }
 
   #prepare() {
@@ -289,12 +290,25 @@ export class PidFiles {
       write(commandLineOf(pid));
     } else {
       // ps / PowerShell are slow; do not block the event loop for them. A child removed
-      // meanwhile (it exited) gets no pidfile.
-      this.pending.add(pid);
+      // meanwhile (it exited) gets no pidfile, and only the latest lookup for a pid is written.
+      const n = ++this.lookups;
+      this.pending.set(pid, n);
       commandLineOfAsync(pid).then((cmd) => {
-        if (this.pending.delete(pid)) write(cmd);
+        if (this.pending.get(pid) !== n) return;
+        this.pending.delete(pid);
+        write(cmd);
       });
     }
+  }
+
+  /**
+   * Records a child again once it is serving. A `#!/usr/bin/env node` script (npx and most
+   * Node CLIs) still shows `env`'s command line when it is spawned, which the reaper would
+   * later never match.
+   * @param {number} pid
+   */
+  refresh(pid) {
+    if (this.mine.has(this.file(pid)) || this.pending.has(pid)) this.record(pid);
   }
 
   /** @param {number} pid */
