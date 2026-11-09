@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows
   or `~/.config/mcp-patchbay/servers.json`) and applies server prefixes. Before, deny rules for
   prefixed servers silently stopped matching. Without a config file, it warns that names were
   mapped as they are.
+- A `restart` racing a `disable` no longer turns a `confirm` server back on: the disable cancels
+  the restart. An `enable` in that window joins the restart instead of showing a prompt whose
+  answer was ignored. A crash marks the server `failed` at once (it used to wait 20 ms), so a
+  restart right after a crash asks a person again.
 
 ## 0.1.0 - 2026-11-09
 
