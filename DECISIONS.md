@@ -115,8 +115,12 @@ brief.
   server becomes `failed`.
   - When the client lacks elicitation entirely, the patchbay logs that a sign-in is needed.
     mcp-remote opens a browser itself.
-  - The detector runs on every child's stderr. That covers people who run `npx mcp-remote` as a
-    stdio command themselves.
+  - **(review fix)** The detector runs only for mcp-remote children: `url` entries, commands
+    whose basename is `mcp-remote`, and package runners (`npx` and similar) with an
+    `mcp-remote[@version]` argument. That keeps the `npx mcp-remote` stdio case working. It acts
+    only while the slot is starting, and the prompt is always labelled `[<server>] `. Before
+    this, any child could make the patchbay show its own unattributed "Sign in" prompt, with any
+    link, at any time.
 - **`import` details.**
   - `autostart.default` is `[]`, because the brief only defines the per-project list.
   - Entries that point at mcp-patchbay itself are skipped, to avoid recursion.
