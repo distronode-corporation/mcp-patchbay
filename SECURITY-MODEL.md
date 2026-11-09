@@ -95,6 +95,11 @@ Two specific mitigations:
   values as `MCP_PATCHBAY_HEADER_<n>` variables. Header values are kept **out of argv**, because
   argv is readable by other local users through `ps` or `/proc`. The environment of a process is
   readable only by the same user (and root).
+- **The url is visible in the process list.** mcp-remote 0.15.2 accepts the server url only as
+  a command-line argument, so the `url` of a remote entry *is* on argv. Any local user can read
+  it with `ps`. If your endpoint carries its key in the url (`https://host/s/<token>/mcp` or
+  `?key=…`), that key is exposed to the other users of the machine. Prefer an endpoint that
+  takes the key in a header. The patchbay's own output redacts the url (see Redaction).
 - **Process groups.** Children are detached into their own process group on POSIX. When the
   patchbay stops, each group is sent SIGTERM synchronously. A detached helper sends SIGKILL to
   any group still there 500 ms later. The pidfiles stay until the exit is seen, so a child that

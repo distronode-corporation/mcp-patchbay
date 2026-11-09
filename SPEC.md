@@ -233,8 +233,11 @@ From the client: `notifications/roots/list_changed` is forwarded to every child 
 stderr ring-buffer lines, logs, `lastError`, `servers`/`info`/`enable` output, doctor output, and
 error messages re-thrown from children. In order:
 
-1. Exact secrets: the child entry's `env` values, `args`, and `headers` values with length ≥ 6.
-   Each is replaced with `[redacted]`, longest first.
+1. Exact secrets: the child entry's `env` values, `args`, and `headers` values, and for a `url`
+   entry the whole `url`, each path segment, each query value and any userinfo (raw and
+   percent-decoded). Only values with length ≥ 6 count. Each is replaced with `[redacted]`,
+   longest first. A url like `https://host/s/<token>/mcp` therefore never shows its token, even
+   though mcp-remote logs `Connecting to remote server: <url>` to stderr.
 2. URL userinfo: `scheme://user:pass@` → `scheme://[redacted]@`.
 3. URL query strings: `?…` up to whitespace, a quote or `#` → `?[redacted]`.
 4. `Bearer <x>` → `Bearer [redacted]`. `Basic <x>` likewise.
@@ -288,6 +291,12 @@ the URL-mode elicitation (§8). Without it the sign-in cannot work. It never goe
   secrets out of argv, where other local users could read them through `ps` or
   `/proc/*/cmdline`. Values that already contain `${` (the user's own placeholders) are passed
   literally, because mcp-remote expands only one level.
+- **The url itself is on argv**, so other local users can read it through `ps` or
+  `/proc/<pid>/cmdline`. mcp-remote 0.15.2 takes the server url only as its first positional
+  argument (`parseCommandLineArgs`: `serverUrl = args[0]`), and does not expand `${VAR}` in it,
+  so there is no way to pass it through the environment or a file. A url that embeds a key is
+  therefore visible in the process list. Put the key in a header instead when the endpoint allows
+  it.
 - Env: `{...process.env, ...entry.env, MCP_REMOTE_CONFIG_DIR: oauth.configDir, MCP_PATCHBAY_HEADER_<i>...}`.
   `configDir` is created with `mkdir -p` and then `chmod 0700`.
 - Start timeout: `authTimeoutSeconds*1000 + 60000`. mcp-remote starts its stdio server only after

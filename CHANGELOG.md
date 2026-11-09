@@ -12,6 +12,11 @@ All notable changes to this project are documented here. The format follows
   remaining process groups after 500 ms, without delaying the patchbay's exit. Pidfiles are kept
   until a child's exit is observed, and the startup reaper now escalates to SIGKILL. After a
   crash, the leftover group members also get a SIGKILL follow-up.
+- A remote server's `url` is now treated as a secret. The whole url, each path segment, each
+  query value and any userinfo (6+ characters) are redacted from `info`, `lastError` and logs.
+  mcp-remote logs the url to stderr, and many endpoints carry their key in the path. The url
+  is still on mcp-remote's argv (mcp-remote has no other way to take it), which is now
+  documented.
 
 ## 0.1.0 - 2026-11-09
 
