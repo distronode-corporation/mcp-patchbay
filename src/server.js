@@ -434,11 +434,16 @@ export class Patchbay {
       await this.#stop(slot);
       if (slot.restart !== token) {
         this.log.info(`${slot.name}: restart cancelled by disable`);
+        this.notifyToolsChanged(); // the stop took its tools away
         return fail(`the restart of ${slot.name} was cancelled by a disable; it is off`, { name: slot.name, state: slot.state });
       }
       this.log.info(`${slot.name}: restarting`);
       try {
-        return await this.toolEnable(name, extra, { skipConfirm: true });
+        const r = await this.toolEnable(name, extra, { skipConfirm: true });
+        // A start that worked announced the new tools; one that failed must still announce
+        // that the old ones are gone.
+        if (r.isError) this.notifyToolsChanged();
+        return r;
       } finally {
         if (slot.restart === token) slot.restart = null;
       }

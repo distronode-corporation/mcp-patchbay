@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fake, startPatchbay, waitFor, isAlive } from './helpers.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fake, startPatchbay, tmpdir, waitFor, isAlive } from './helpers.js';
 
 const OWN = ['servers', 'enable', 'disable', 'restart', 'info'];
 
@@ -216,4 +218,18 @@ test('info shows details and full instructions when on', async (t) => {
   const on = await pb.own('info', { name: 'example-files' });
   assert.equal(on.data.instructions, long);
   assert.equal(on.data.policy, 'allow');
+});
+
+test('a restart that fails to start again announces that the old tools are gone', async (t) => {
+  const flag = path.join(tmpdir(), 'fail-now');
+  const pb = await startPatchbay({ config: { version: 1, servers: { flaky: fake({ tools: 'echo', policy: 'allow', env: { FAKE_EXIT_IF_EXISTS: flag } }) } } });
+  t.after(() => pb.close());
+  await pb.own('enable', { name: 'flaky' });
+  assert.ok((await pb.toolNames()).includes('flaky__echo'));
+  fs.writeFileSync(flag, '');
+  const before = pb.listChanged.count;
+  const r = await pb.own('restart', { name: 'flaky' });
+  assert.equal(r.isError, true);
+  await waitFor(() => pb.listChanged.count > before);
+  assert.deepEqual(await pb.toolNames(), OWN);
 });
