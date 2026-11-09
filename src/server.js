@@ -37,7 +37,8 @@ const ALWAYS_LOAD = { 'anthropic/alwaysLoad': true };
  *   inFlight: number, startPromise: Promise<{ok: boolean, error?: string}> | null,
  *   confirmPromise: Promise<{ok: boolean, message?: string}> | null,
  *   authUrls: Set<string>, urlElicitationId?: string, startAbort?: AbortController,
- *   relisting: boolean, relistAgain: boolean, lastNotify?: Promise<boolean>
+ *   relisting: boolean, relistAgain: boolean, lastNotify?: Promise<boolean>,
+ *   restart: {promise: Promise<any>} | null
  * }} Slot
  */
 
@@ -71,6 +72,7 @@ export class Patchbay {
       const slot = {
         name, entry, state: 'off', child: null, published: [], skipped: [], inFlight: 0,
         startPromise: null, confirmPromise: null, authUrls: new Set(), relisting: false, relistAgain: false,
+        restart: null,
       };
       this.slots.set(name, slot);
       this.bySegment.set(entry.segment, slot);
@@ -330,6 +332,12 @@ export class Patchbay {
     const { slot, error } = this.#slotOrError(name);
     if (!slot) return error;
     if (slot.entry.policy === 'deny') return fail(`${slot.name} is denied by policy`);
+    if (slot.restart && !o.skipConfirm) {
+      // A restart of an approved server is stopping it; join that rather than asking a question
+      // whose answer the restart would ignore. If a disable cancels it, decide afresh.
+      await slot.restart.promise;
+      return this.toolEnable(name, extra, o);
+    }
     if (slot.state === 'on') return ok(this.#summary(slot, 'already on'));
     if (!slot.startPromise && slot.entry.policy === 'confirm' && !o.skipConfirm) {
       const c = await this.#confirm(slot, extra);
@@ -385,6 +393,11 @@ export class Patchbay {
   async toolDisable(name) {
     const { slot, error } = this.#slotOrError(name);
     if (!slot) return error;
+    if (slot.restart) {
+      // The approval ends here: the restart in progress must not turn the server back on.
+      slot.restart = null;
+      if (slot.state === 'off') return ok({ name: slot.name, state: 'off', message: 'was restarting; the restart is cancelled' });
+    }
     if (slot.state === 'off') return ok({ name: slot.name, state: 'off', message: 'already off' });
     if (slot.state === 'failed') {
       slot.state = 'off';
@@ -409,13 +422,28 @@ export class Patchbay {
     if (slot.state === 'starting' || slot.state === 'waiting-for-sign-in') {
       return fail(`${slot.name} is ${slot.state}; wait for it, or disable it first`);
     }
-    if (slot.state !== 'on') return this.toolEnable(name, extra);
+    if (slot.state !== 'on' || slot.restart) return this.toolEnable(name, extra);
     if (slot.inFlight > 0) {
       return fail(`${slot.name} has ${slot.inFlight} call(s) in flight; try again when they finish`, { name: slot.name, inFlight: slot.inFlight });
     }
-    await this.#stop(slot);
-    this.log.info(`${slot.name}: restarting`);
-    return this.toolEnable(name, extra, { skipConfirm: true });
+    // The approval of an "on" server carries over to its restart, unless a disable comes in
+    // while the old child is stopping (state is "off" then): disable clears this token.
+    const token = { promise: /** @type {Promise<any>} */ (Promise.resolve()) };
+    slot.restart = token;
+    token.promise = (async () => {
+      await this.#stop(slot);
+      if (slot.restart !== token) {
+        this.log.info(`${slot.name}: restart cancelled by disable`);
+        return fail(`the restart of ${slot.name} was cancelled by a disable; it is off`, { name: slot.name, state: slot.state });
+      }
+      this.log.info(`${slot.name}: restarting`);
+      try {
+        return await this.toolEnable(name, extra, { skipConfirm: true });
+      } finally {
+        if (slot.restart === token) slot.restart = null;
+      }
+    })();
+    return token.promise;
   }
 
   /** @param {unknown} name */
@@ -545,24 +573,26 @@ export class Patchbay {
    */
   #onChildExit(slot, child, info) {
     if (info.expected || slot.child !== child) return;
-    let msg = info.signal ? `exited on signal ${info.signal}` : `exited with code ${info.code}`;
-    // Give the last stderr lines a moment to arrive before quoting them.
-    const finish = () => {
+    const msg = info.signal ? `exited on signal ${info.signal}` : `exited with code ${info.code}`;
+    const describe = () => {
       const last = child.stderrTail(1)[0];
-      const full = redact(last ? `${msg}; last stderr: ${last}` : msg, child.secrets);
-      if (slot.state === 'on') {
-        slot.state = 'failed';
-        slot.lastError = full;
-        slot.child = null;
-        this.#unpublish(slot);
-        this.log.warn(`${slot.name}: ${full}`);
-        this.notifyToolsChanged();
-      } else {
-        slot.exitError = full;
-      }
+      return redact(last ? `${msg}; last stderr: ${last}` : msg, child.secrets);
     };
-    if (slot.state === 'on') setTimeout(finish, 20);
-    else finish();
+    if (slot.state !== 'on') {
+      slot.exitError = describe();
+      return;
+    }
+    // Failed at once: the approval ends with the crash, so nothing may restart it without asking.
+    slot.state = 'failed';
+    slot.lastError = describe();
+    slot.child = null;
+    this.#unpublish(slot);
+    this.notifyToolsChanged();
+    // Give the last stderr lines a moment to arrive before quoting them.
+    setTimeout(() => {
+      if (slot.state === 'failed' && slot.lastChild === child) slot.lastError = describe();
+      this.log.warn(`${slot.name}: ${describe()}`);
+    }, 20);
   }
 
   /** @param {Slot} slot */

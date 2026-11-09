@@ -91,7 +91,7 @@ errors are used only for malformed requests.
 | `servers` | `{}` | For every configured server: `name, description, policy, state, toolCount?` (when `on`), `lastError?` (redacted, when `failed`), `skippedTools?`, `canEnable`, `whyNot?`. |
 | `enable` | `{name}` | See §3.1. |
 | `disable` | `{name}` | Refuses with `"<name> has N call(s) in flight"` while calls are running. Otherwise closes the child, drops its tools and sends `list_changed`. Disabling a server that is `starting` or `waiting-for-sign-in` aborts the start. Disabling a `failed` server resets it to `off`. |
-| `restart` | `{name}` | If `on`: disable (the in-flight rule applies), then start again with **no** new confirmation. If `off` or `failed`: exactly `enable`, including confirmation. If `starting`: refused. |
+| `restart` | `{name}` | If `on`: disable (the in-flight rule applies), then start again with **no** new confirmation. If `off` or `failed`: exactly `enable`, including confirmation. If `starting`: refused. **[review fix]** While the old child is stopping, the server reads `off`. A `disable` in that window cancels the restart (it returns an error saying so, and the server stays off). An `enable` in that window joins the restart instead of asking. |
 | `info` | `{name}` | `description, policy, state, toolCount, skippedTools, lastError, stderrTail` (redacted, last 5 lines), plus `instructions` in full when `on`. |
 
 The `name` inputs are `{type:"string", enum:[configured names]}`, and `additionalProperties` is
@@ -319,7 +319,7 @@ off ──enable──▶ starting ──initialized+listed──▶ on ──di
   configured `cwd` that does not exist fails the start with a clear message, before spawning.
 - `lastError` is a redacted one-line message, plus the last stderr line when there is one.
 - A crash means an unexpected exit in any state other than `off`. It marks only that server
-  `failed`, drops its tools, sends `list_changed`, sends SIGTERM to the rest of its process group,
+  `failed` **at once** (so a `restart` right after it needs a new confirmation), drops its tools, sends `list_changed`, sends SIGTERM to the rest of its process group,
   and removes its pidfile. 500 ms later it sends SIGKILL to that group, unless a process with the
   leader's pid exists by then (that would be a new process, since ours has exited). The bare pid
   is never signalled here. There is no automatic restart.
