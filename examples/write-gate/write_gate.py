@@ -80,6 +80,8 @@ def named_identities(tool_input: Any, identities: Iterable[str]) -> list[str]:
 def load_config(path: str) -> dict:
     with open(path, encoding="utf-8") as f:
         cfg = json.load(f)
+    if not isinstance(cfg, dict):
+        raise ValueError("config: must be a JSON object")
     identities = cfg.get("identities")
     if not isinstance(identities, list) or not all(isinstance(i, str) and i for i in identities):
         raise ValueError("config: identities must be a non-empty list of strings")
