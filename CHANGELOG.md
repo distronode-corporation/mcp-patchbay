@@ -1,0 +1,42 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
+[Semantic Versioning](https://semver.org/).
+
+## 0.1.0 - 2026-11-09
+
+### Added
+
+- An MCP server over stdio that hosts configured MCP servers as child processes, with the tools
+  `servers`, `enable`, `disable`, `restart` and `info`. Each carries
+  `_meta: {"anthropic/alwaysLoad": true}`.
+- Policies `allow`, `confirm` and `deny`. `confirm` asks a person through a form-mode
+  elicitation, and fails closed when the client has no elicitation support.
+- Live tool publishing with `notifications/tools/list_changed`. `enable` waits up to 2 s for the
+  client's re-list.
+- Proxying:
+  - pass-through tool definitions and results, with `outputSchema` not enforced;
+  - cancellation and progress (original progress tokens);
+  - `roots/list` and elicitation forwarding, and roots `list_changed` fan-out;
+  - sampling refused;
+  - merging of children's own `list_changed`;
+  - a per-server `timeoutMs`.
+- Children:
+  - full env inheritance with per-entry `env`;
+  - a process group per child on POSIX;
+  - tolerance of non-JSON stdout;
+  - redacted stderr ring buffers;
+  - crash isolation;
+  - pidfiles, and reaping of leftovers after a crash.
+- Remote servers through mcp-remote 0.15.2:
+  - header values kept out of argv;
+  - `MCP_REMOTE_CONFIG_DIR` at 0700;
+  - sign-in detection with a URL-mode elicitation (or a form fallback);
+  - the state `waiting-for-sign-in`.
+- Autostart per project (`CLAUDE_PROJECT_DIR`), and instructions folded into the patchbay's own,
+  capped at 4,096 characters.
+- Redaction of tokens, URL query strings, and entries' own env, args and headers in everything
+  the patchbay emits.
+- CLI: `import` (from a Claude Code config), `doctor`, and `rename-permissions`.
+- The `examples/write-gate` PreToolUse hook example, with tests.

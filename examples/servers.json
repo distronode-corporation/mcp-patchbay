@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "servers": {
+    "example-files": {
+      "description": "Read and write files in /path/to/project",
+      "policy": "allow",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@2.2.0", "/path/to/project"],
+      "prefix": "files"
+    },
+    "example-everything": {
+      "description": "The MCP reference test server, for trying things out",
+      "policy": "confirm",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything@2.2.1"],
+      "timeoutMs": 60000
+    },
+    "example-remote": {
+      "description": "A remote MCP server that needs a sign-in",
+      "policy": "confirm",
+      "url": "https://mcp.example.com/mcp"
+    },
+    "example-remote-key": {
+      "description": "A remote MCP server with an API key header",
+      "policy": "confirm",
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ${EXAMPLE_API_KEY}" },
+      "env": { "EXAMPLE_API_KEY": "replace-me" }
+    },
+    "example-local-tool": {
+      "description": "A local stdio server with its own env and working directory",
+      "policy": "confirm",
+      "command": "/path/to/bin/example-mcp-server",
+      "args": ["--stdio"],
+      "env": { "EXAMPLE_LOG_LEVEL": "info" },
+      "cwd": "/path/to/project"
+    },
+    "example-danger": {
+      "description": "Never available to the agent",
+      "policy": "deny",
+      "command": "/path/to/bin/example-admin-server"
+    }
+  },
+  "autostart": {
+    "default": [],
+    "projects": {
+      "/path/to/project": ["example-files"]
+    }
+  },
+  "oauth": {
+    "configDir": "~/.config/mcp-patchbay/oauth",
+    "authTimeoutSeconds": 300
+  }
+}
