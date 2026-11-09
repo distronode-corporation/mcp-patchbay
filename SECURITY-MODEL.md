@@ -152,7 +152,10 @@ child deliberately leaking data.
   refuses a directory it does not own. Pidfiles hold a SHA-256 of the child's command line, not
   the command line itself.
 - At startup, leftovers are killed only if their owning patchbay is gone **and** the pid still
-  runs the recorded command line. This avoids killing a process that reused the pid.
+  runs the recorded command line **and** it still leads its own process group **and**, on
+  Linux, it has the recorded start time. Only the process group is signalled, never a bare pid.
+  This avoids killing a process that reused the pid. On other systems a reused pid that runs
+  the identical command line as its own group leader would still match.
 - `import` writes its output at 0600, and backs up any file it replaces.
 - `rename-permissions` keeps the file's mode, and backs it up before writing.
 - Neither prints env or header values.
