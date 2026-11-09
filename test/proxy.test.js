@@ -68,9 +68,11 @@ test('progress is forwarded with the original progress token', async (t) => {
   const seen = [];
   // The SDK client sets progressToken to its own request id; we check that the notifications we
   // receive are matched back to this request (they would be dropped with an "unknown token"
-  // error otherwise) and carry the child's progress values.
+  // error otherwise) and carry the child's progress values. `settleMs` keeps the last progress
+  // and the response apart: the SDK client drops a progress notification it reads in the same
+  // chunk as the response (its own race; the next test covers the patchbay's side of it).
   const r = await pb.client.request(
-    { method: 'tools/call', params: { name: 'slow__sleep', arguments: { ms: 200 } } },
+    { method: 'tools/call', params: { name: 'slow__sleep', arguments: { ms: 200, settleMs: 100 } } },
     CallToolResultSchema,
     { onprogress: (p) => seen.push(p) },
   );
