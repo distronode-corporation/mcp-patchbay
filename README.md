@@ -289,6 +289,8 @@ The full threat model is in [SECURITY-MODEL.md](SECURITY-MODEL.md). In short:
   - Config permission checks are skipped.
   - Children are not detached. Trees are killed with `taskkill /T /F /PID`, which runs as a
     separate process, so a child may outlive the patchbay by a moment.
+  - When a child exits on its own, processes it started are not cleaned up: Windows has no
+    process group to address, and killing the exited pid could hit a process that reused it.
   - `.cmd` shims such as `npx` cannot be spawned directly. Use
     `"command": "cmd", "args": ["/c", "npx", ...]`.
   - Command-line checks for reaping use PowerShell (`Get-CimInstance`).
