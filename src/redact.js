@@ -11,10 +11,12 @@ const SECRET_KEY = '(?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|sec
 
 /** @type {Array<[RegExp, string | ((...m: string[]) => string)]>} */
 const RULES = [
-  // URL userinfo: scheme://user:pass@host
-  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@'"<>]+@/gi, `$1${R}@`],
-  // URL query strings: keep the path, drop everything from ? to whitespace, quote or #
-  [/\b((?:https?|wss?|ftp|file):\/\/[^\s?#'"<>]*)\?[^\s#'"<>]*/gi, `$1?${R}`],
+  // URL userinfo: scheme://user:pass@host. The scheme is bounded: unbounded, it rescanned the
+  // rest of a long run such as `a.a.a.` from every word boundary (quadratic).
+  [/\b([a-z][a-z0-9+.-]{0,31}:\/\/)[^\s/@'"<>]+@/gi, `$1${R}@`],
+  // URL query strings: keep the path, drop everything from ? to whitespace, quote or #. The
+  // query is optional so a url without one is consumed whole, not rescanned from each scheme.
+  [/\b((?:https?|wss?|ftp|file):\/\/[^\s?#'"<>]*)(\?[^\s#'"<>]*)?/gi, (m, url, query) => (query ? `${url}?${R}` : m)],
   // Authorization schemes
   [/\b(Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]+/g, `$1 ${R}`],
   // "key": "value" in JSON-ish text
