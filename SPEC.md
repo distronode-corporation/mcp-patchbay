@@ -433,7 +433,11 @@ mcp-patchbay --help | --version
   It exits 1 if any server failed.
 - **rename-permissions**: for each list in `permissions.allow`, `ask` and `deny`:
   - `mcp__X__tool` adds `mcp__patchbay__<seg(X)>__tool`, and `mcp__X` adds
-    `mcp__patchbay__<seg(X)>__*`. `seg` is `X`, or that server's `prefix` when `--config` is given.
+    `mcp__patchbay__<seg(X)>__*`. `seg` is that server's `prefix`, or `X` if it has none. The
+    config is `--config`, else the path the patchbay would use (§2.1). **[review fix]** Before,
+    the config was read only with `--config`, so rules for prefixed servers were silently
+    wrong. If no file exists at the default path, it prints a warning that prefixes are unknown
+    and that names were mapped as they are. An invalid config exits 78.
   - Rules are skipped if they match `mcp__claude-in-chrome__*`, `mcp__plugin_*`, `mcp__claude_ai_*`
     or `mcp__patchbay__*`, contain `(`, have an invalid server segment, or would be longer than 128.
   - It never removes or reorders rules, and adds no duplicates.

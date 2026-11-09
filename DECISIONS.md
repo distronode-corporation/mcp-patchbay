@@ -130,7 +130,9 @@ brief.
     have none.
 - **`rename-permissions`.** Additions are appended to each list, in the order of their source
   rules. Rules already present are not duplicated, and the file's indentation and mode are kept.
-  The optional `--config` maps server names to their `prefix`.
+  `--config` names the config that maps server names to their `prefix`. **(review fix)** Without
+  the flag, the default config (`resolveConfigPath()`) is used. A missing file is a warning, not
+  an error, because the tool is still useful when no server has a prefix.
 - **`doctor`.** It allows 60 s per stdio server (auth timeout + 60 s for `url`), and prints the
   first stderr line as "the first error". It exits 1 if any server failed and 78 on config errors.
 - **`write-gate` "once per session".** It asks until a matching call has actually *run*, which
