@@ -225,12 +225,16 @@ mcp-patchbay rename-permissions ~/.claude/settings.json --write    # backs up, t
 For each rule in `permissions.allow`, `ask` and `deny`, it **adds** a patchbay twin, and keeps
 every existing rule:
 
-- `mcp__X__tool` adds `mcp__patchbay__X__tool`.
-- `mcp__X` (a whole server) adds `mcp__patchbay__X__*`.
+- `mcp__X__tool` adds `mcp__patchbay__<seg>__tool`.
+- `mcp__X` (a whole server) adds `mcp__patchbay__<seg>__*`.
+
+`<seg>` is server `X`'s `prefix` if it has one, else `X`. The prefixes come from the patchbay
+config: `--config <servers.json>`, else the same file the patchbay would load
+(`$MCP_PATCHBAY_CONFIG`, else `~/.config/mcp-patchbay/servers.json`). If there is no config
+file, it warns that prefixes are unknown and maps names as they are.
 
 It skips rules it cannot proxy: `mcp__claude-in-chrome__*`, `mcp__plugin_*`, `mcp__claude_ai_*`,
-rules with parentheses, and existing patchbay rules. Add `--config <servers.json>` to use each
-server's `prefix`.
+rules with parentheses, and existing patchbay rules.
 
 ## Policy and safety model
 

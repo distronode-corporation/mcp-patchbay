@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
   trigger the sign-in prompt, and only while they are starting. The prompt is always labelled
   `[<server>] `. A re-auth request while a server is on is logged instead of prompting. The
   sign-in URL is no longer written to the log, not even in redacted form.
+- `rename-permissions` without `--config` now loads the default config (`$MCP_PATCHBAY_CONFIG`
+  or `~/.config/mcp-patchbay/servers.json`) and applies server prefixes. Before, deny rules for
+  prefixed servers silently stopped matching. Without a config file, it warns that names were
+  mapped as they are.
 
 ## 0.1.0 - 2026-11-09
 
