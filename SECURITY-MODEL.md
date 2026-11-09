@@ -65,7 +65,10 @@ The agent cannot:
 - **It cannot stop the agent from asking.** A prompt-injected agent may ask you repeatedly to
   enable a server. The prompt always names the real server and your own description.
 - **It lasts for the session.** Approval covers that server until it is disabled, crashes, or the
-  patchbay exits. A later `restart` of a server that is on does not ask again.
+  patchbay exits. A later `restart` of a server that is on does not ask again. A `disable` that
+  arrives while that restart is stopping the old child cancels it, so the server stays off. A
+  crash marks the server `failed` as soon as the exit is observed, so a restart after that asks
+  again.
 - **It trusts the client's UI.** The guarantee is only as strong as the client's elicitation UI
   and the person's attention.
 
