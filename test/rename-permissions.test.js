@@ -117,7 +117,8 @@ test('CLI without --config loads the default config and applies its prefixes', (
   assert.equal(viaEnv.stderr, '', 'no warning when the config was found');
 
   const home = tmpdir();
-  fs.mkdirSync(path.join(home, '.config', 'mcp-patchbay'), { recursive: true });
+  fs.mkdirSync(path.join(home, '.config', 'mcp-patchbay'), { recursive: true, mode: 0o700 });
+  fs.chmodSync(path.join(home, '.config', 'mcp-patchbay'), 0o700); // independent of the umask
   writeConfig(path.join(home, '.config', 'mcp-patchbay'), { version: 1, servers: { github: { command: 'x', prefix: 'gh' } } });
   const env = { ...process.env, HOME: home, USERPROFILE: home };
   delete env.MCP_PATCHBAY_CONFIG;
