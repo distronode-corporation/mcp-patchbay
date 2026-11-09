@@ -363,24 +363,67 @@ export function jsonSyntaxMessage(what, text) {
 }
 
 /**
- * Reads, checks and validates the config file once.
+ * Refuses a directory holding the config (or the file a config symlink points to) that someone
+ * else could change: group- or world-writable (sticky or not), or owned by someone other than
+ * you or root. Whoever can write the directory can replace the file (POSIX only).
+ * @param {string} file the config path, for the message
+ * @param {string} dir
+ */
+export function checkDirPermissions(file, dir) {
+  if (process.platform === 'win32') return;
+  let st;
+  try {
+    st = fs.statSync(dir);
+  } catch (e) {
+    throw new ConfigError(`cannot check the directory of config ${file}: ${/** @type {any} */ (e).code ?? e}`);
+  }
+  if (st.mode & 0o022) {
+    throw new ConfigError(
+      `refusing to start: the directory ${dir} holding config ${file} is group- or world-writable ` +
+      `(mode ${(st.mode & 0o7777).toString(8)}), so someone else could replace the config. ` +
+      `Fix it with: chmod go-w ${dir}, or move the config to a directory only you can write.`,
+    );
+  }
+  const uid = process.getuid?.();
+  if (uid !== undefined && st.uid !== uid && st.uid !== 0) {
+    throw new ConfigError(`refusing to start: the directory ${dir} holding config ${file} is owned by uid ${st.uid}, not by you (uid ${uid}) or root.`);
+  }
+}
+
+/**
+ * Reads, checks and validates the config file once. The file is opened once and the checks and
+ * the read use that descriptor, so it cannot be swapped between check and read. A symlink is
+ * followed; then its target must pass the same checks, and so must the directories holding the
+ * link and the target (DECISIONS.md).
  * @param {string} file
  * @returns {Config}
  */
 export function loadConfig(file) {
-  let st;
+  const posix = process.platform !== 'win32';
+  let fd;
   try {
-    st = fs.statSync(file);
+    // O_NONBLOCK: opening a FIFO must not hang startup; it is refused below as not a regular file.
+    fd = fs.openSync(file, posix ? fs.constants.O_RDONLY | fs.constants.O_NONBLOCK : 'r');
   } catch (e) {
     throw new ConfigError(`cannot read config ${file}: ${/** @type {any} */ (e).code ?? e}. Create it (see examples/servers.json) or pass --config <path>.`);
   }
-  if (!st.isFile()) throw new ConfigError(`config ${file} is not a regular file`);
-  checkFilePermissions(file, st);
   let text;
   try {
-    text = fs.readFileSync(file, 'utf8');
-  } catch (e) {
-    throw new ConfigError(`cannot read config ${file}: ${/** @type {any} */ (e).code ?? e}`);
+    const st = fs.fstatSync(fd);
+    if (!st.isFile()) throw new ConfigError(`config ${file} is not a regular file`);
+    checkFilePermissions(file, st);
+    if (posix) {
+      const dirs = new Set([path.dirname(path.resolve(file))]);
+      if (fs.lstatSync(file).isSymbolicLink()) dirs.add(path.dirname(fs.realpathSync(file)));
+      for (const dir of dirs) checkDirPermissions(file, dir);
+    }
+    try {
+      text = fs.readFileSync(fd, 'utf8');
+    } catch (e) {
+      throw new ConfigError(`cannot read config ${file}: ${/** @type {any} */ (e).code ?? e}`);
+    }
+  } finally {
+    fs.closeSync(fd);
   }
   let raw;
   try {
