@@ -108,7 +108,10 @@ for (const tool of tools) {
         inputSchema: { ms: z.number(), settleMs: z.number().optional() },
       }, async ({ ms, settleMs }, extra) => {
         const token = extra._meta?.progressToken;
-        extra.signal.addEventListener('abort', () => marker('cancelled', String(extra.signal.reason ?? 'aborted')));
+        const onAbort = () => marker('cancelled', String(extra.signal.reason ?? 'aborted'));
+        // A cancel read with the request can abort the signal before this handler runs.
+        if (extra.signal.aborted) onAbort();
+        else extra.signal.addEventListener('abort', onAbort);
         const steps = 4;
         for (let i = 1; i <= steps; i++) {
           if (extra.signal.aborted) return text('aborted');
