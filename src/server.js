@@ -33,7 +33,7 @@ const ALWAYS_LOAD = { 'anthropic/alwaysLoad': true };
  * @typedef {{
  *   name: string, entry: import('./config.js').ServerEntry, state: State,
  *   child: Child | null, lastChild?: Child, published: import('./naming.js').Published[],
- *   skipped: import('./naming.js').Skipped[], lastError?: string, exitError?: string,
+ *   skipped: import('./naming.js').Skipped[], lastError?: string, exitError?: () => string,
  *   inFlight: number, startPromise: Promise<{ok: boolean, error?: string}> | null,
  *   confirmPromise: Promise<{ok: boolean, message?: string}> | null,
  *   authUrls: Set<string>, urlElicitationId?: string, startAbort?: AbortController,
@@ -539,7 +539,7 @@ export class Patchbay {
         return { ok: true };
       } catch (e) {
         if (slot.child === child) {
-          const msg = slot.exitError ?? this.#describeStartError(slot, child, e, timeout);
+          const msg = slot.exitError?.() ?? this.#describeStartError(slot, child, e, timeout);
           slot.state = 'failed';
           slot.lastError = msg;
           slot.child = null;
@@ -590,7 +590,9 @@ export class Patchbay {
       return redact(last ? `${msg}; last stderr: ${last}` : msg, child.secrets);
     };
     if (slot.state !== 'on') {
-      slot.exitError = describe();
+      // Read when the start fails, after the transport has closed: stderr may still be
+      // arriving when the exit event fires.
+      slot.exitError = describe;
       return;
     }
     // Failed at once: the approval ends with the crash, so nothing may restart it without asking.

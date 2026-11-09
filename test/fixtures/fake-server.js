@@ -11,6 +11,7 @@
 //   FAKE_MARKER_DIR     directory for marker files (cancelled, argv.json, signed-in)
 //   FAKE_GRANDCHILD=1   spawn a long-lived grandchild in our process group at startup
 //   FAKE_STDERR         text written to stderr at startup ("\n" separated lines)
+//   FAKE_STDERR_BULK    write this many bytes of filler lines to stderr at startup
 //   FAKE_STDERR_TAIL    text written to stderr at startup with no newline after it
 //   FAKE_EXIT_ON_START  exit with this code before speaking MCP
 //   FAKE_EXIT_IF_EXISTS exit with code 1 before speaking MCP if this path exists
@@ -63,11 +64,14 @@ if (env.FAKE_STDERR) {
   for (const line of env.FAKE_STDERR.split('\n')) process.stderr.write(line + '\n');
 }
 
+if (env.FAKE_STDERR_BULK) process.stderr.write(`${'filler '.repeat(9)}\n`.repeat(Math.ceil(Number(env.FAKE_STDERR_BULK) / 64)));
 if (env.FAKE_STDERR_TAIL) process.stderr.write(env.FAKE_STDERR_TAIL);
 
 if (env.FAKE_EXIT_IF_EXISTS && fs.existsSync(env.FAKE_EXIT_IF_EXISTS)) process.exit(1);
 
 if (env.FAKE_EXIT_ON_START) {
+  // Exit once stderr is flushed, so nothing written above is lost.
+  await new Promise((r) => process.stderr.write('', r));
   process.exit(Number(env.FAKE_EXIT_ON_START));
 }
 
