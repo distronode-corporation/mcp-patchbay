@@ -36,6 +36,10 @@ All notable changes to this project are documented here. The format follows
 - A JSON syntax error in the config, in `import --from <claude.json>`, or in the
   `rename-permissions` settings file is reported as the file path plus line and column. Node's
   parser message quoted the surrounding text, which could include a token.
+- Kills can no longer hit an unrelated process through a reused pid. Post-exit cleanup and the
+  startup reaper never fall back to signalling a bare pid. Pidfiles now record the process start
+  time (Linux, `v: 2`), and the reaper requires it to match and requires the pid to still lead
+  its own process group. 0.1.0 pidfiles, which have no start time, are not trusted on Linux.
 
 ## 0.1.0 - 2026-11-09
 
