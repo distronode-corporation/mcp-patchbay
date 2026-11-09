@@ -38,6 +38,10 @@ MCP client (e.g. Claude Code)  ⇄ stdio ⇄  mcp-patchbay  ⇄ stdio ⇄  child
    config". On Windows both checks are skipped (README known limit).
 4. Every other config error also exits with 78, and the message names the offending JSON path.
    That includes a missing file, invalid JSON, schema violations and unknown keys.
+   **[review fix]** For invalid JSON the message is only `config <file> is not valid JSON (line L,
+   column C)`. The parser's own message is never shown, because Node quotes the text around the
+   error (`Unexpected token 'g', ..."B_TOKEN": ghp_abc"...`), and that text may be a secret. The
+   same applies to `import --from` and to the settings file of `rename-permissions`.
 
 ### 2.2 Schema (strict)
 

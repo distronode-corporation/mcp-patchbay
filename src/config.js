@@ -274,6 +274,95 @@ export function checkFilePermissions(file, st) {
 }
 
 /**
+ * The offset of the first JSON syntax error in `text`, or -1 if it is valid JSON. Used to report
+ * a location without quoting the text: V8's own message ("Unexpected token 'g', ..."B_TOKEN":
+ * ghp_abc"... is not valid JSON") includes a snippet of the file, which may hold a secret.
+ * @param {string} text
+ * @returns {number}
+ */
+export function jsonErrorPosition(text) {
+  let i = 0;
+  const n = text.length;
+  const stop = {};
+  const fail = () => { throw stop; };
+  const ws = () => { while (i < n && ' \t\n\r'.includes(text[i])) i++; };
+  const str = () => {
+    i++;
+    while (i < n) {
+      const c = text[i];
+      if (c === '"') { i++; return; }
+      if (c < ' ') fail();
+      if (c === '\\') {
+        const e = text[i + 1];
+        if (e !== undefined && '"\\/bfnrt'.includes(e)) i += 2;
+        else if (e === 'u' && /^[0-9a-fA-F]{4}$/.test(text.slice(i + 2, i + 6))) i += 6;
+        else { i++; fail(); }
+      } else i++;
+    }
+    fail();
+  };
+  const NUM = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
+  const value = () => {
+    ws();
+    const c = text[i];
+    if (c === '{' || c === '[') {
+      const close = c === '{' ? '}' : ']';
+      i++;
+      ws();
+      if (text[i] === close) { i++; return; }
+      for (;;) {
+        if (c === '{') {
+          ws();
+          if (text[i] !== '"') fail();
+          str();
+          ws();
+          if (text[i] !== ':') fail();
+          i++;
+        }
+        value();
+        ws();
+        if (text[i] === ',') { i++; continue; }
+        if (text[i] === close) { i++; return; }
+        fail();
+      }
+    }
+    if (c === '"') return str();
+    for (const word of ['true', 'false', 'null']) {
+      if (c === word[0]) {
+        for (const ch of word) { if (text[i] !== ch) fail(); i++; }
+        return;
+      }
+    }
+    NUM.lastIndex = i;
+    if (!NUM.exec(text)) fail();
+    i = NUM.lastIndex;
+  };
+  try {
+    value();
+    ws();
+    if (i < n) fail();
+    return -1;
+  } catch (e) {
+    if (e === stop) return i;
+    return -1; // too deeply nested to scan
+  }
+}
+
+/**
+ * "<what> is not valid JSON (line L, column C)", without quoting any of the text.
+ * @param {string} what  e.g. "config /path/to/servers.json"
+ * @param {string} text
+ */
+export function jsonSyntaxMessage(what, text) {
+  const pos = jsonErrorPosition(text);
+  if (pos < 0) return `${what} is not valid JSON`;
+  const before = text.slice(0, pos);
+  const line = before.split('\n').length;
+  const column = pos - before.lastIndexOf('\n');
+  return `${what} is not valid JSON (line ${line}, column ${column})`;
+}
+
+/**
  * Reads, checks and validates the config file once.
  * @param {string} file
  * @returns {Config}
@@ -296,8 +385,9 @@ export function loadConfig(file) {
   let raw;
   try {
     raw = JSON.parse(text);
-  } catch (e) {
-    throw new ConfigError(`config ${file} is not valid JSON: ${/** @type {Error} */ (e).message}`);
+  } catch {
+    // Never e.message: V8 quotes the text around the error, which may be a secret.
+    throw new ConfigError(jsonSyntaxMessage(`config ${file}`, text));
   }
   try {
     return validateConfig(raw);

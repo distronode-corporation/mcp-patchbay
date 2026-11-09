@@ -1,7 +1,7 @@
 // `mcp-patchbay rename-permissions`: add mcp__patchbay__ twins of existing MCP permission rules.
 // Never removes or reorders a rule. See SPEC.md §10.
 import fs from 'node:fs';
-import { ConfigError, EX_CONFIG, loadConfig, resolveConfigPath } from './config.js';
+import { ConfigError, EX_CONFIG, jsonSyntaxMessage, loadConfig, resolveConfigPath } from './config.js';
 import { backup, writeAtomic } from './fsutil.js';
 import { CLIENT_PREFIX, MAX_CLIENT_NAME, isValidSegment } from './naming.js';
 
@@ -109,9 +109,15 @@ export async function runRenamePermissions(argv) {
   let settings;
   try {
     text = fs.readFileSync(file, 'utf8');
-    settings = JSON.parse(text);
   } catch (e) {
-    process.stderr.write(`rename-permissions: cannot read ${file}: ${/** @type {Error} */ (e).message}\n`);
+    process.stderr.write(`rename-permissions: cannot read ${file}: ${/** @type {any} */ (e).code ?? /** @type {Error} */ (e).message}\n`);
+    return 1;
+  }
+  try {
+    settings = JSON.parse(text);
+  } catch {
+    // Never the parser's message: it quotes the text around the error (settings can hold env).
+    process.stderr.write(`rename-permissions: ${jsonSyntaxMessage(file, text)}\n`);
     return 1;
   }
   const { additions, skipped } = computeAdditions(settings, { segmentFor });
