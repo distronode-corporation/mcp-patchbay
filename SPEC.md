@@ -337,21 +337,29 @@ log(`\nPlease authorize this client by visiting:\n${authorizationUrl.toString()}
 
 `log` writes to stderr, prefixed with `[<pid>] `. **[resolved]** So the URL is on the line *after*
 the marker, not on the same line. The detector accepts both forms: a URL on the marker line, or
-the first `https?://` token on any of the next 3 lines. The detector runs on every child's stderr,
-not only on `url` children. That covers people who run `npx mcp-remote` as a stdio command
-themselves.
+the first `https?://` token on any of the next 3 lines.
+
+**The detector runs only on mcp-remote children**: `url` entries, a `command` whose basename
+(without `.cmd`/`.exe`/`.js`…) is `mcp-remote`, and a package runner (`npx`, `pnpx`, `bunx`,
+`pnpm`, `yarn`, `bun`) with an `mcp-remote` or `mcp-remote@<version>` argument. That last case
+covers people who run `npx mcp-remote` as a stdio command themselves. Any other child that prints
+the line gets no prompt. **A URL is acted on only while the server is `starting` or
+`waiting-for-sign-in`.**
 
 When a URL is found during start:
 
 1. The state becomes `waiting-for-sign-in`.
 2. After the client has initialized, the patchbay sends one elicitation per distinct URL:
-   - if the client declared `elicitation.url`: `{mode:"url", message:"Sign in to <name> to finish
-     turning it on.", url, elicitationId}`;
-   - else if it declared form: `{mode:"form", message:"Sign in to <name> to finish turning it on.
-     Open this link in your browser: <url>", requestedSchema:{type:"object", properties:{done:
-     {type:"boolean", title:"I have signed in"}}}}`;
-   - else nothing is sent. The log says that sign-in is needed (redacted). mcp-remote also tries
-     to open a browser itself.
+   - if the client declared `elicitation.url`: `{mode:"url", message:"[<name>] Sign in to <name>
+     to finish turning it on.", url, elicitationId}`;
+   - else if it declared form: `{mode:"form", message:"[<name>] Sign in to <name> to finish
+     turning it on. Open this link in your browser: <url>", requestedSchema:{type:"object",
+     properties:{done: {type:"boolean", title:"I have signed in"}}}}`;
+
+   The `[<name>] ` label is always there: the URL comes from the child, so the prompt is
+   attributed like a child's own elicitation (§5.3).
+   - else nothing is sent. The log says that sign-in is needed (without the URL). mcp-remote
+     also tries to open a browser itself.
 3. If the person declines or cancels, the start is aborted and the server becomes `failed`
    (`sign-in declined`).
 4. `enable` stays pending until the child initializes, which moves the state to `on` and sends
@@ -359,8 +367,9 @@ When a URL is found during start:
    passes, the child exits, or the person declines. Other tool calls are served concurrently
    throughout.
 
-If the line appears while the server is already `on` (mcp-remote re-auth during a session), the
-same elicitation is sent, but the state does not change.
+If the line appears while the server is already `on` (mcp-remote re-auth during a session), no
+elicitation is sent. The patchbay logs a warning (without the URL), and mcp-remote still tries to
+open a browser itself. `restart` signs in again through the normal flow.
 
 ## 9. Lifecycle
 

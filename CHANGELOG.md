@@ -17,6 +17,10 @@ All notable changes to this project are documented here. The format follows
   mcp-remote logs the url to stderr, and many endpoints carry their key in the path. The url
   is still on mcp-remote's argv (mcp-remote has no other way to take it), which is now
   documented.
+- Only mcp-remote children (`url` entries, an `mcp-remote` command, or `npx mcp-remote`) can
+  trigger the sign-in prompt, and only while they are starting. The prompt is always labelled
+  `[<server>] `. A re-auth request while a server is on is logged instead of prompting. The
+  sign-in URL is no longer written to the log, not even in redacted form.
 
 ## 0.1.0 - 2026-11-09
 

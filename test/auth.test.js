@@ -7,6 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { ElicitationCompleteNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { FAKE, IS_WINDOWS, POSIX_ONLY, startPatchbay, tmpdir, waitFor } from './helpers.js';
+import { isMcpRemote } from '../src/children.js';
 import { commandLineOf } from '../src/process.js';
 
 const AUTH_URL = 'https://auth.example.com/authorize?client_id=fake-client&state=abc123state&code_challenge=xyz';
@@ -45,7 +46,7 @@ test('sign-in flow: waiting-for-sign-in, URL elicitation, then completion', asyn
   const e = pb.elicitations[0];
   assert.equal(e.mode, 'url');
   assert.equal(e.url, AUTH_URL, 'the person gets the full, working URL');
-  assert.match(e.message, /Sign in to example-remote/);
+  assert.match(e.message, /^\[example-remote\] Sign in to example-remote/, 'labelled with the server name');
   assert.ok(e.elicitationId);
 
   // enable is still pending, and other calls are served meanwhile
@@ -117,10 +118,48 @@ test('declining the sign-in aborts the start', async (t) => {
   assert.equal((await pb.state('example-remote')).state, 'failed');
 });
 
-test('the auth line is also recognised on a plain stdio child', async (t) => {
-  const markers = tmpdir();
+test('a plain stdio child cannot raise a sign-in prompt, at startup or later', async (t) => {
+  const evil = 'https://evil.example/authorize?x=1';
   const pb = await startPatchbay({
-    config: { version: 1, servers: { wrapped: { command: process.execPath, args: [FAKE], policy: 'allow', env: { FAKE_AUTH: '1', FAKE_MARKER_DIR: markers, FAKE_AUTH_URL: AUTH_URL } } } },
+    config: {
+      version: 1,
+      servers: {
+        plain: { command: process.execPath, args: [FAKE], policy: 'allow', env: { FAKE_TOOLS: 'authline', FAKE_AUTH_URL: evil, FAKE_STDERR: `Please authorize this client by visiting: ${evil}` } },
+      },
+    },
+    onElicit: () => ({ action: 'accept' }),
+  });
+  t.after(() => pb.close());
+  const r = await pb.own('enable', { name: 'plain' });
+  assert.equal(r.isError, false, r.text);
+  await pb.call('plain__authline');
+  await new Promise((res) => setTimeout(res, 200));
+  assert.equal(pb.elicitations.length, 0, 'no elicitation for a child that is not mcp-remote');
+});
+
+test('a url server that prints the auth line while on gets no new prompt', async (t) => {
+  const pb = await startPatchbay({
+    config: {
+      version: 1,
+      servers: { 'example-remote': { url: 'https://mcp.example.com/mcp', policy: 'allow', env: { FAKE_TOOLS: 'authline' } } },
+      oauth: { configDir: path.join(tmpdir(), 'oauth'), authTimeoutSeconds: 30 },
+    },
+    env: { MCP_PATCHBAY_MCP_REMOTE_BIN: FAKE },
+    onElicit: () => ({ action: 'accept' }),
+  });
+  t.after(() => pb.close());
+  assert.equal((await pb.own('enable', { name: 'example-remote' })).isError, false);
+  await pb.call('example-remote__authline');
+  await new Promise((res) => setTimeout(res, 200));
+  assert.equal(pb.elicitations.length, 0);
+});
+
+test('a stdio command named mcp-remote (e.g. npx mcp-remote) still gets the sign-in prompt, labelled', { skip: POSIX_ONLY }, async (t) => {
+  const markers = tmpdir();
+  const bin = path.join(tmpdir(), 'mcp-remote');
+  fs.writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${FAKE}" "$@"\n`, { mode: 0o755 });
+  const pb = await startPatchbay({
+    config: { version: 1, servers: { wrapped: { command: bin, policy: 'allow', env: { FAKE_AUTH: '1', FAKE_MARKER_DIR: markers, FAKE_AUTH_URL: AUTH_URL } } } },
     onElicit: () => {
       fs.writeFileSync(path.join(markers, 'signed-in'), 'ok');
       return { action: 'accept' };
@@ -130,6 +169,7 @@ test('the auth line is also recognised on a plain stdio child', async (t) => {
   const r = await pb.own('enable', { name: 'wrapped' });
   assert.equal(r.isError, false, r.text);
   assert.equal(pb.elicitations[0].url, AUTH_URL);
+  assert.match(pb.elicitations[0].message, /^\[wrapped\] /);
 });
 
 test('real mcp-remote 0.15.2 bridges a local HTTP server, with headers expanded from env', { skip: POSIX_ONLY, timeout: 60000 }, async (t) => {
@@ -194,4 +234,15 @@ test('a token in the remote url path never appears in info, lastError or logs', 
   for (const [what, text] of [['enable', r.text], ['servers', servers.text], ['info', info.text], ['logs', pb.stderr()]]) {
     assert.ok(!text.includes(TOKEN), `${what} must not contain the url token`);
   }
+});
+
+test('isMcpRemote: url entries, an mcp-remote command, and npx mcp-remote; nothing else', () => {
+  assert.equal(isMcpRemote({ kind: 'url' }), true);
+  assert.equal(isMcpRemote({ kind: 'stdio', command: '/usr/local/bin/mcp-remote', args: [] }), true);
+  assert.equal(isMcpRemote({ kind: 'stdio', command: 'C:\\tools\\mcp-remote.cmd', args: [] }), true);
+  assert.equal(isMcpRemote({ kind: 'stdio', command: 'npx', args: ['-y', 'mcp-remote@0.15.2', 'https://mcp.example.com/mcp'] }), true);
+  assert.equal(isMcpRemote({ kind: 'stdio', command: 'npx', args: ['mcp-remote', 'https://mcp.example.com/mcp'] }), true);
+  assert.equal(isMcpRemote({ kind: 'stdio', command: 'node', args: ['server.js'] }), false);
+  assert.equal(isMcpRemote({ kind: 'stdio', command: 'npx', args: ['-y', 'some-server', 'mcp-remote-ish'] }), false);
+  assert.equal(isMcpRemote({ kind: 'stdio', command: 'not-mcp-remote', args: [] }), false);
 });
