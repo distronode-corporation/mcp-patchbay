@@ -23,17 +23,17 @@ jobs:
         os: [ubuntu-24.04, macos-15, windows-2025]
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v5 # TODO-PIN-SHA
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v5 # TODO-PIN-SHA
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm test
       - run: npm pack --dry-run
-      - uses: actions/setup-python@v5 # TODO-PIN-SHA
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: write-gate example tests
