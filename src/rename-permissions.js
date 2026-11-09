@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { ConfigError, EX_CONFIG, jsonSyntaxMessage, loadConfig, resolveConfigPath } from './config.js';
 import { backup, writeAtomic } from './fsutil.js';
 import { CLIENT_PREFIX, MAX_CLIENT_NAME, isValidSegment } from './naming.js';
+import { ruleMatchesEnableConfirm } from './permissions.js';
 
 const LISTS = ['allow', 'ask', 'deny'];
 
@@ -49,6 +50,12 @@ export function computeAdditions(settings, o = {}) {
       const twin = `${CLIENT_PREFIX}${segmentFor(server)}__${tool}`;
       if (twin.length > MAX_CLIENT_NAME) {
         skipped.push({ list, rule, reason: `the patchbay name would exceed ${MAX_CLIENT_NAME} characters` });
+        continue;
+      }
+      // A server segment never contains "__" or "*", so no twin can match enable_confirm today;
+      // this keeps it that way. Such a rule would let the host approve it without asking.
+      if (ruleMatchesEnableConfirm(twin)) {
+        skipped.push({ list, rule, reason: 'its patchbay twin would match enable_confirm' });
         continue;
       }
       if (have.has(twin)) continue;

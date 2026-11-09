@@ -23,8 +23,9 @@ export class ConfigError extends Error {
  *   command?: string, args: string[], env: Record<string,string>, cwd?: string,
  *   url?: string, headers: Record<string,string>, prefix?: string, timeoutMs: number
  * }} ServerEntry
+ * @typedef {'elicitation'|'host'} ConfirmVia
  * @typedef {{
- *   version: 1, order: string[], servers: Record<string, ServerEntry>,
+ *   version: 1, confirmVia: ConfirmVia, order: string[], servers: Record<string, ServerEntry>,
  *   autostart: {default: string[], projects: Record<string, string[]>},
  *   oauth: {configDir: string, authTimeoutSeconds: number}
  * }} Config
@@ -85,6 +86,7 @@ const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const HEADER_KEY = /^[A-Za-z0-9_-]+$/; // mcp-remote 0.15.2 parseHeaderLine
 const SERVER_KEYS = ['description', 'policy', 'command', 'args', 'env', 'cwd', 'url', 'headers', 'prefix', 'timeoutMs'];
 const POLICIES = ['allow', 'confirm', 'deny'];
+export const CONFIRM_VIA = ['elicitation', 'host'];
 
 /**
  * @param {string} name
@@ -187,8 +189,10 @@ function validateServer(name, raw) {
  */
 export function validateConfig(raw) {
   if (!isObj(raw)) throw new ConfigError('the config must be a JSON object');
-  onlyKeys(raw, ['version', 'servers', 'autostart', 'oauth'], '');
+  onlyKeys(raw, ['version', 'confirmVia', 'servers', 'autostart', 'oauth'], '');
   if (raw.version !== 1) throw new ConfigError('version must be 1');
+  const confirmVia = raw.confirmVia === undefined ? 'elicitation' : raw.confirmVia;
+  if (!CONFIRM_VIA.includes(confirmVia)) throw new ConfigError(`confirmVia must be one of ${CONFIRM_VIA.join(', ')}`);
   if (raw.servers === undefined) throw new ConfigError('servers is required');
   if (!isObj(raw.servers)) throw new ConfigError('servers must be an object');
 
@@ -251,7 +255,7 @@ export function validateConfig(raw) {
     }
   }
 
-  return { version: 1, order, servers, autostart, oauth };
+  return { version: 1, confirmVia, order, servers, autostart, oauth };
 }
 
 /**

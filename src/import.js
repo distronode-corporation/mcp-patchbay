@@ -103,7 +103,9 @@ export function importClaudeConfig(o) {
     imported.push({ name, policy, kind: /** @type {string} */ (kind) });
   }
   /** @type {any} */
-  const config = { version: 1, servers, autostart: { default: [], projects: {} } };
+  // Claude Code shows its own permission prompt for every tool call, so confirm goes through it
+  // (enable_confirm); its form elicitation is not answered by a person in every Claude Code UI.
+  const config = { version: 1, confirmVia: 'host', servers, autostart: { default: [], projects: {} } };
   if (o.project) {
     config.autostart.projects[o.project] = imported.filter((i) => !disabled.includes(i.name)).map((i) => i.name);
   }
@@ -158,6 +160,7 @@ export async function runImport(argv) {
   if (flags.project) {
     lines.push(`Autostart for ${flags.project}: ${result.config.autostart.projects[flags.project].join(', ') || '(none)'}`);
   }
+  lines.push('confirmVia: host (confirm servers are turned on with enable_confirm, which Claude Code asks you about; run mcp-patchbay doctor to check that no allow rule approves it)');
   if (bak) lines.push(`Backed up the previous file to ${bak}`);
   lines.push(`Wrote ${out} (mode 0600). Env and header values were copied but are not shown.`);
   process.stdout.write(lines.join('\n') + '\n');

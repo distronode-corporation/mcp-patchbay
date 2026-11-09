@@ -87,6 +87,7 @@ restart the patchbay (in Claude Code: `/mcp`, then reconnect `patchbay`).
 ```json
 {
   "version": 1,
+  "confirmVia": "host",
   "servers": {
     "example-files": {
       "description": "Files in /path/to/project",
@@ -119,6 +120,7 @@ exits with code **78** and a message on stderr.
 | Key | Meaning |
 |---|---|
 | `version` | Must be `1`. |
+| `confirmVia` | How a person approves a `confirm` server. `"elicitation"` (the default): `enable` asks through the client's form elicitation. `"host"`: `enable` refuses, and the agent calls `enable_confirm`, which the host's own tool-permission prompt asks the person about. `import` writes `"host"`. See [confirmVia](#confirmvia-elicitation-or-host). |
 | `servers.<name>` | The name uses 1–64 characters from `[A-Za-z0-9_-]`, with no `__` and no trailing `_`. |
 | `description` | One line, at most 300 characters. The agent sees it in `servers` and in the patchbay's instructions. |
 | `policy` | `allow` (the agent may enable it), `confirm` (a person must approve each enable; the default), or `deny` (it can never be enabled). |
@@ -154,12 +156,27 @@ a `${VAR}` placeholder is passed as it is, and mcp-remote expands it from its ow
 | Tool | Input | What it does |
 |---|---|---|
 | `servers` | — | Lists every configured server: name, description, policy, state (`off`, `starting`, `on`, `failed`, `waiting-for-sign-in`), its tool count when on, its redacted last error when failed, skipped tools, and whether it can be enabled (and if not, why). |
-| `enable` | `{name}` | Starts the server, after asking a person if the policy is `confirm`. Returns its tool count, up to 10 sample tool names, and its instructions (cut to 2,000 characters). |
+| `enable` | `{name}` | Starts the server, after asking a person if the policy is `confirm`. Returns its tool count, up to 10 sample tool names, and its instructions (cut to 2,000 characters). With `confirmVia: "host"` it refuses `confirm` servers and points to `enable_confirm`. |
+| `enable_confirm` | `{name}` | Only with `confirmVia: "host"`. Turns on a `confirm` server; the host asks the person before it runs, and that yes is the approval. Refuses `allow` servers (use `enable`) and `deny` servers. Marked `destructiveHint: true`. |
 | `disable` | `{name}` | Stops the server and removes its tools. Refused while that server has calls in flight; the refusal says how many. |
 | `restart` | `{name}` | Stops and starts the server again. There is no new confirmation if it was already on. If it was off, this is the same as `enable`. |
 | `info` | `{name}` | Description, policy, state, the last stderr lines (redacted), and its full instructions when on. |
 
-Every one of these tools carries `_meta: {"anthropic/alwaysLoad": true}`. There is no generic
+Every one of these tools carries `_meta: {"anthropic/alwaysLoad": true}`.
+
+### confirmVia: elicitation or host
+
+Some clients declare form elicitation but never show it: in the Claude Code VS Code extension
+(2.1.319), the patchbay's question is answered `decline` with nothing shown to the person. The
+patchbay fails closed, so `confirm` servers cannot be turned on there with the default
+`"elicitation"`. With `"host"`, the approval is the host's own permission prompt for
+`mcp__patchbay__enable_confirm`, which those clients do show, and which the model cannot answer.
+
+That prompt only appears if nothing approves the tool in advance. **Do not allow
+`mcp__patchbay__enable_confirm`, `mcp__patchbay__*`, `mcp__patchbay` or `*`**, and do not run in
+a mode that skips prompts (Claude Code's `bypassPermissions`, or `dontAsk` with the tool
+allowed): there, every `enable_confirm` is approved automatically. `mcp-patchbay doctor
+--project <dir>` reads your Claude Code settings and warns about such rules. There is no generic
 "call any tool" or "exec" tool, and there never will be.
 
 ## Naming contract
@@ -234,7 +251,22 @@ config: `--config <servers.json>`, else the same file the patchbay would load
 file, it warns that prefixes are unknown and maps names as they are.
 
 It skips rules it cannot proxy: `mcp__claude-in-chrome__*`, `mcp__plugin_*`, `mcp__claude_ai_*`,
-rules with parentheses, and existing patchbay rules.
+rules with parentheses, and existing patchbay rules. It never adds a rule that would match
+`mcp__patchbay__enable_confirm`.
+
+### `doctor`
+
+```sh
+mcp-patchbay doctor --project /path/to/project --no-start
+```
+
+It validates the config and prints `confirmVia`. It then reads `~/.claude/settings.json` and
+`settings.local.json`, plus the project's `.claude/settings.json` and `settings.local.json`
+with `--project`, and names every allow rule that would approve `enable_confirm` without asking
+(the exact name, `mcp__patchbay`, and wildcards such as `mcp__patchbay__*` and `*`), and any
+`defaultMode: "bypassPermissions"`. With `confirmVia: "host"` these are warnings and the exit
+code is 1. Without `--no-start` it then starts each `allow` server briefly (`--all`: `confirm`
+ones too) and reports its tool count.
 
 ## Policy and safety model
 
@@ -243,9 +275,11 @@ The full threat model is in [SECURITY-MODEL.md](SECURITY-MODEL.md). In short:
 - **The config is trusted. The agent is not.** The agent can only pick a configured name. It
   cannot add servers or change commands, and it cannot run anything that is not in the file.
   This is why the patchbay refuses a config that others can write to.
-- **`confirm` means a person said yes**, in the client's own elicitation UI, for this session's
-  enable. Only an accept with `allow: true` counts. A client without elicitation support cannot
-  enable `confirm` servers at all.
+- **`confirm` means a person said yes**, for this session's enable. With `confirmVia:
+  "elicitation"` that is the client's elicitation UI, and only an accept with `allow: true`
+  counts; a client without elicitation support cannot enable `confirm` servers at all. With
+  `"host"` it is the host's permission prompt for `enable_confirm`, so it is only as strong as
+  your permission rules (see [confirmVia](#confirmvia-elicitation-or-host)).
 - **`confirm` does not vet individual calls.** After a server is on, its tools are governed by
   your client's permission rules, exactly like directly connected servers. **Do not allow
   `mcp__patchbay` as a whole**: that approves every tool of every hosted server, including

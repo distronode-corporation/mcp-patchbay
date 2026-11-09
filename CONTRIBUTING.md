@@ -5,7 +5,7 @@ Thank you for helping. Some ground rules keep the patchbay small and trustworthy
 ## Principles
 
 - **No generic call or exec tool, ever.** The patchbay's own tool surface is `servers`, `enable`,
-  `disable`, `restart` and `info`.
+  `disable`, `restart` and `info`, plus `enable_confirm` with `confirmVia: "host"`.
 - **Fail closed.** Anything about consent (`confirm`, elicitation) must refuse when in doubt.
 - **The naming contract is public.** Changes to how tool names are formed (see the README) are
   breaking changes.

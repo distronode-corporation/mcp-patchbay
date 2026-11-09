@@ -1,5 +1,5 @@
-// The patchbay: an MCP server whose tools are its own five plus those of the children that are
-// switched on. See SPEC.md §3-§5 and §8.
+// The patchbay: an MCP server whose tools are its own five (six with confirmVia "host") plus those
+// of the children that are switched on. See SPEC.md §3-§5 and §8.
 import { randomUUID } from 'node:crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
@@ -108,6 +108,11 @@ export class Patchbay {
     return Boolean(this.clientCaps.elicitation?.form);
   }
 
+  /** confirmVia "host": the person approves a confirm server through the host's permission prompt for enable_confirm. */
+  get hostConfirm() {
+    return this.config.confirmVia === 'host';
+  }
+
   async whenClientReady() {
     if (this.initialized) return true;
     let t;
@@ -158,7 +163,8 @@ export class Patchbay {
       required: ['name'],
       additionalProperties: false,
     });
-    return [
+    const host = this.hostConfirm;
+    const tools = [
       {
         name: 'servers',
         title: 'List hosted MCP servers',
@@ -170,7 +176,9 @@ export class Patchbay {
       {
         name: 'enable',
         title: 'Turn on a hosted MCP server',
-        description: 'Starts a hosted MCP server and adds its tools, named <server>__<tool>. Servers with policy confirm ask a person first; deny servers cannot be enabled. Returns the tool count, sample tool names and the server\'s instructions.',
+        description: host
+          ? 'Starts a hosted MCP server with policy allow and adds its tools, named <server>__<tool>. Servers with policy confirm are turned on with enable_confirm instead; deny servers cannot be enabled. Returns the tool count, sample tool names and the server\'s instructions.'
+          : 'Starts a hosted MCP server and adds its tools, named <server>__<tool>. Servers with policy confirm ask a person first; deny servers cannot be enabled. Returns the tool count, sample tool names and the server\'s instructions.',
         inputSchema: nameInput('Server name, as listed by servers'),
         annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         _meta: ALWAYS_LOAD,
@@ -200,6 +208,19 @@ export class Patchbay {
         _meta: ALWAYS_LOAD,
       },
     ];
+    if (host) {
+      // destructiveHint: a host that auto-approves non-destructive tools must still ask. The
+      // person's answer to that permission prompt is the approval (SECURITY-MODEL.md).
+      tools.splice(2, 0, {
+        name: 'enable_confirm',
+        title: 'Turn on a hosted MCP server that needs a person\'s approval',
+        description: 'Turns on a hosted MCP server whose policy is confirm, which needs the person\'s approval. The host asks the person before running this tool; their yes is the approval. Adds the server\'s tools, named <server>__<tool>, and returns the tool count, sample tool names and the server\'s instructions. Use enable for allow servers; deny servers cannot be enabled.',
+        inputSchema: nameInput('Server name, as listed by servers (policy confirm)'),
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+        _meta: ALWAYS_LOAD,
+      });
+    }
+    return tools;
   }
 
   publishedTools() {
@@ -264,6 +285,10 @@ export class Patchbay {
     switch (name) {
       case 'servers': return this.toolServers();
       case 'enable': return this.toolEnable(args.name, extra);
+      case 'enable_confirm':
+        // Not listed, and not callable, unless confirmVia is "host".
+        if (this.hostConfirm) return this.toolEnableConfirm(args.name, extra);
+        return this.#forward(request, extra);
       case 'disable': return this.toolDisable(args.name);
       case 'restart': return this.toolRestart(args.name, extra);
       case 'info': return this.toolInfo(args.name);
@@ -284,7 +309,7 @@ export class Patchbay {
     if (slot.entry.policy === 'deny') return 'policy is deny';
     if (slot.state === 'on') return 'already on';
     if (slot.state === 'starting' || slot.state === 'waiting-for-sign-in') return `already ${slot.state}`;
-    if (slot.entry.policy === 'confirm' && !this.canElicitForm()) {
+    if (slot.entry.policy === 'confirm' && !this.hostConfirm && !this.canElicitForm()) {
       return "needs a person's approval, but this client cannot ask (no elicitation support); a person must add it to autostart or set policy: allow";
     }
     return undefined;
@@ -305,9 +330,13 @@ export class Patchbay {
       s.canEnable = !whyNot;
       if (whyNot) s.whyNot = whyNot;
       else canEnable.push(slot.name);
+      if (!whyNot && this.hostConfirm && slot.entry.policy === 'confirm') s.enableWith = 'enable_confirm';
       servers.push(s);
     }
-    return ok({ servers, canEnable, usage: 'enable {name} turns a server on; disable {name} turns it off. Tools appear as <server>__<tool>.' });
+    const usage = this.hostConfirm
+      ? 'enable {name} turns an allow server on; enable_confirm {name} turns a confirm server on after the host asks the person; disable {name} turns it off. Tools appear as <server>__<tool>.'
+      : 'enable {name} turns a server on; disable {name} turns it off. Tools appear as <server>__<tool>.';
+    return ok({ servers, canEnable, usage });
   }
 
   /** @param {Slot} slot @param {string} [message] */
@@ -326,7 +355,8 @@ export class Patchbay {
   /**
    * @param {unknown} name
    * @param {any} extra
-   * @param {{skipConfirm?: boolean}} [o]
+   * @param {{skipConfirm?: boolean, approved?: boolean}} [o] skipConfirm: a restart of a server
+   *   that is on; approved: enable_confirm, whose host permission prompt was the confirmation
    */
   async toolEnable(name, extra, o = {}) {
     const { slot, error } = this.#slotOrError(name);
@@ -345,7 +375,7 @@ export class Patchbay {
       await slot.startPromise;
       return this.toolEnable(name, extra, o);
     }
-    if (!slot.startPromise && slot.entry.policy === 'confirm' && !o.skipConfirm) {
+    if (!slot.startPromise && slot.entry.policy === 'confirm' && !o.skipConfirm && !o.approved) {
       const c = await this.#confirm(slot, extra);
       if (!c.ok) return fail(/** @type {string} */ (c.message));
     }
@@ -357,13 +387,36 @@ export class Patchbay {
   }
 
   /**
+   * enable_confirm (confirmVia "host" only). The host asked the person before running it, so
+   * this is enable with the confirmation given. It refuses allow servers, so the host's prompt
+   * for this tool always means "a confirm server is about to start".
+   * @param {unknown} name
+   * @param {any} extra
+   */
+  async toolEnableConfirm(name, extra) {
+    const { slot, error } = this.#slotOrError(name);
+    if (!slot) return error;
+    if (slot.entry.policy === 'deny') return fail(`${slot.name} is denied by policy`);
+    if (slot.entry.policy === 'allow') return fail(`${slot.name} has policy allow; turn it on with enable {"name": "${slot.name}"}`);
+    this.log.info(`${slot.name}: approved through the host's permission prompt for enable_confirm`);
+    return this.toolEnable(name, extra, { approved: true });
+  }
+
+  /**
    * Asks the person, through form elicitation, whether the agent may turn the server on.
-   * Fails closed in every case but an explicit accept with allow === true.
+   * Fails closed in every case but an explicit accept with allow === true. With confirmVia
+   * "host" it never asks: the answer is to call enable_confirm.
    * @param {Slot} slot
    * @param {any} extra
    * @returns {Promise<{ok: boolean, message?: string}>}
    */
   #confirm(slot, extra) {
+    if (this.hostConfirm) {
+      return Promise.resolve({
+        ok: false,
+        message: `${slot.name} needs a person's approval: call enable_confirm with {"name": "${slot.name}"}, which asks the person through the host's permission prompt.`,
+      });
+    }
     if (!this.canElicitForm()) {
       return Promise.resolve({
         ok: false,
@@ -788,7 +841,7 @@ export class Patchbay {
       .map((n) => /** @type {Slot} */ (this.slots.get(n)))
       .filter((s) => s.state === 'on' && s.child?.instructions)
       .map((s) => ({ name: s.name, instructions: /** @type {string} */ (s.child?.instructions) }));
-    return buildInstructions(servers, autostarted);
+    return buildInstructions(servers, autostarted, { confirmVia: this.config.confirmVia });
   }
 
   /**

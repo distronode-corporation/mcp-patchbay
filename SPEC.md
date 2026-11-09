@@ -57,6 +57,7 @@ Unknown keys are rejected at every level, with `unknown key "<k>" at <path>`.
 | Key | Type | Rule |
 |---|---|---|
 | `version` | `1` | required |
+| `confirmVia` | `"elicitation"｜"host"` | default `"elicitation"`; how a person approves a `confirm` server (§3.3). `import` writes `"host"` |
 | `servers` | object | required; may be empty |
 | `servers.<name>` | object | name matches `^[A-Za-z0-9_-]{1,64}$`, contains no `__`, does not end with `_` **[resolved]**, see below |
 | `.description` | string | optional (default `""`), one line (no CR/LF), ≤ 300 chars |
@@ -93,7 +94,8 @@ is rejected at load time). Autostart is the person's own config choice, so it co
 
 ## 3. The patchbay's own tools
 
-There are exactly five. Each one has `_meta: {"anthropic/alwaysLoad": true}`. All results are
+There are exactly five, plus `enable_confirm` when `confirmVia` is `"host"` (§3.3). Each one has
+`_meta: {"anthropic/alwaysLoad": true}`. All results are
 `content: [{type:"text", text: <JSON>}]`. Refusals and failures set `isError: true`. Protocol
 errors are used only for malformed requests.
 
@@ -115,6 +117,9 @@ false. There is no generic call or exec tool, and none will be added.
 2. If the server is already `on`, enable returns its summary and does nothing else. If it is
    `starting` or `waiting-for-sign-in`, enable joins the start that is already running.
 3. Policy `confirm`:
+   - With `confirmVia: "host"`, enable refuses: `"<name> needs a person's approval: call
+     enable_confirm with {"name": "<name>"}, which asks the person through the host's permission
+     prompt."` It never elicits (§3.3).
    - If the client did not declare form-mode elicitation, enable refuses: `"<name> needs a
      person's approval, but this client cannot ask (no elicitation support). A person must add
      it to autostart in the patchbay config, or set policy: allow."` It fails closed.
@@ -135,7 +140,36 @@ false. There is no generic call or exec tool, and none will be added.
 7. Return `{name, state:"on", toolCount, sampleTools: first ≤10 exposed names, skippedTools,
    instructions: child instructions truncated to 2000 chars (with "…[truncated]")}`.
 
-### 3.2 Instructions (initialize result)
+### 3.3 confirmVia "host" and enable_confirm
+
+Some clients declare form elicitation but never show it to the person: the Claude Code VS Code
+extension (2.1.319) answers the patchbay's question with `decline` and shows nothing, so with
+`confirmVia: "elicitation"` a `confirm` server cannot be turned on there. `confirmVia: "host"`
+moves the person's approval into the host's own tool-permission prompt, which those clients do
+show and the model cannot answer.
+
+- `enable` and `restart` of a `confirm` server that is not on refuse with the hint in §3.1.
+  `restart` of a `confirm` server that is `on` works as before, with no new approval.
+- A sixth tool, `enable_confirm {name}`, is listed (between `enable` and `disable`). Its
+  annotations are `readOnlyHint: false, destructiveHint: true, idempotentHint: true,
+  openWorldHint: false`; `destructiveHint` keeps hosts that auto-approve non-destructive tools
+  asking. Its description says that it turns on a server that needs the person's approval and
+  that the host asks the person before running it.
+- `enable_confirm` refuses unknown names, `deny` servers (`"<name> is denied by policy"`) and
+  `allow` servers (`"<name> has policy allow; turn it on with enable …"`), so the host's prompt
+  for it always means a `confirm` server is about to start. Otherwise it is `enable` with the
+  confirmation already given: it joins a start or restart in progress, reports an `on` server,
+  and starts an `off` or `failed` one. It needs no client elicitation support.
+- `servers` reports `confirm` servers as `canEnable: true` with `enableWith: "enable_confirm"`,
+  and its `usage` and the instructions header (§3.4) name `enable_confirm`.
+- With `confirmVia: "elicitation"` (the default) the tool is not listed, and a call to it is the
+  protocol error for an unknown tool.
+
+The approval is only as strong as the host's prompt. A host that runs the tool without asking
+(an allow rule matching `mcp__patchbay__enable_confirm`, a bypass mode) approves it
+automatically. `doctor` warns about such rules (§10); SECURITY-MODEL.md has the detail.
+
+### 3.4 Instructions (initialize result)
 
 The client's `initialize` request is handled by a wrapper. It runs the SDK's own
 `_oninitialize`, so the client capabilities get recorded. It then starts the autostart set in
@@ -145,8 +179,8 @@ come up they publish their tools with `list_changed`.
 
 The text has three parts:
 
-1. A header of about four lines on how to use `servers`, `enable` and `disable`, and the naming
-   contract.
+1. A header of about four lines on how to use `servers`, `enable` and `disable` (and
+   `enable_confirm` with `confirmVia: "host"`), and the naming contract.
 2. A catalogue, one line per server: `- <name> [<state>, <policy>]: <description>`, with the
    description cut to 120 chars.
 3. For each autostarted server that is `on` and has instructions:
@@ -436,7 +470,7 @@ open a browser itself. `restart` signs in again through the normal flow.
 ```
 mcp-patchbay [--config <path>]
 mcp-patchbay import --from <claude.json> [--project <dir>] [--out <servers.json>]
-mcp-patchbay doctor [--config <path>] [--all]
+mcp-patchbay doctor [--config <path>] [--project <dir>] [--all] [--no-start]
 mcp-patchbay rename-permissions <settings.json> [--write] [--config <path>]
 mcp-patchbay --help | --version
 ```
@@ -455,11 +489,23 @@ mcp-patchbay --help | --version
     `<out>.bak-<UTC timestamp>` (mode 0600).
   - The file is written at mode 0600 (and the dir at 0700 if created), through a temp file and a
     rename. The output is checked by the same validator as the config.
+  - It writes `confirmVia: "host"` (§3.3), because the source is a Claude Code config and
+    Claude Code asks the person before every tool call it has no rule for.
   - It prints names, policies, kinds and skips, but never env or header values.
-- **doctor**: validates the config (exit 78 on error). For each `allow` server, or every
+- **doctor**: validates the config (exit 78 on error).
+  - It prints `confirmVia`, then reads Claude Code's `~/.claude/settings.json` and
+    `settings.local.json`, plus `<dir>/.claude/settings.json` and `settings.local.json` with
+    `--project <dir>`. For each `permissions.allow` rule that matches
+    `mcp__patchbay__enable_confirm` (the exact name, `mcp__patchbay`, or any `*` wildcard that
+    matches it, such as `mcp__patchbay__*`, `mcp__*` and `*`), and for `permissions.defaultMode:
+    "bypassPermissions"`, it prints a line naming the file and the rule. With `confirmVia:
+    "host"` these are warnings and doctor exits 1; a settings file that cannot be read or parsed
+    also counts (fail closed). With `"elicitation"` they are notes and do not change the exit
+    code. A missing file is reported and skipped. It never quotes a settings file's text.
+  - `--no-start` stops here. Otherwise, for each `allow` server, or every
   non-`deny` server with `--all`, it starts the server with a 60 s budget (the auth timeout + 60 s
   for `url`), prints `name: ok, N tools` or `name: failed: <first error, redacted>`, then stops it.
-  It exits 1 if any server failed.
+  It exits 1 if any server failed or any warning was printed.
 - **rename-permissions**: for each list in `permissions.allow`, `ask` and `deny`:
   - `mcp__X__tool` adds `mcp__patchbay__<seg(X)>__tool`, and `mcp__X` adds
     `mcp__patchbay__<seg(X)>__*`. `seg` is that server's `prefix`, or `X` if it has none. The
@@ -469,7 +515,8 @@ mcp-patchbay --help | --version
     and that names were mapped as they are. An invalid config exits 78.
   - Rules are skipped if they match `mcp__claude-in-chrome__*`, `mcp__plugin_*`, `mcp__claude_ai_*`
     or `mcp__patchbay__*`, contain `(`, have an invalid server segment, or would be longer than 128.
-  - It never removes or reorders rules, and adds no duplicates.
+  - It never removes or reorders rules, and adds no duplicates. It never adds a rule that
+    matches `mcp__patchbay__enable_confirm` (none can be formed, and a guard skips one if it were).
   - Without `--write` it is a dry run that prints a diff. With `--write` it copies the file to
     `<file>.bak-<ts>` and then writes atomically with the same mode.
 
@@ -477,7 +524,8 @@ mcp-patchbay --help | --version
 
 - Tools only.
 - No `logging` forwarding.
-- Elicitation needs the client's support for `confirm` servers.
+- With `confirmVia: "elicitation"`, `confirm` servers need a client that shows form elicitation
+  to the person. With `"host"`, they need a host that asks before running `enable_confirm`.
 - The 128-character rule assumes the patchbay is registered under the name `patchbay`.
 - On Windows: no permission check on the config, `.cmd` shims need `cmd /c`, and tree-kill
   depends on `taskkill`.
