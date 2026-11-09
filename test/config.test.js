@@ -224,3 +224,44 @@ test('jsonErrorPosition finds the offset of the first syntax error', () => {
   ];
   for (const [text, want] of cases) assert.equal(jsonErrorPosition(text), want, JSON.stringify(text));
 });
+
+test('a config in a group- or world-writable directory is refused', { skip: POSIX_ONLY }, (t) => {
+  const dir = tmpdir();
+  const p = writeConfig(dir, good);
+  t.after(() => fs.chmodSync(dir, 0o700));
+  for (const mode of [0o770, 0o707, 0o1777]) {
+    fs.chmodSync(dir, mode);
+    assert.throws(() => loadConfig(p), (e) => e instanceof ConfigError && e.exitCode === 78 && /directory .* is group- or world-writable/.test(e.message), mode.toString(8));
+  }
+  fs.chmodSync(dir, 0o755);
+  assert.doesNotThrow(() => loadConfig(p));
+});
+
+test('a symlinked config is used only if its target passes the same checks', { skip: POSIX_ONLY }, (t) => {
+  const linkDir = tmpdir();
+  const goodTargetDir = tmpdir();
+  const target = writeConfig(goodTargetDir, good);
+  const link = path.join(linkDir, 'servers.json');
+  fs.symlinkSync(target, link);
+  assert.equal(loadConfig(link).order.length, 3, 'a symlink to a safe file in a safe directory works');
+
+  fs.chmodSync(target, 0o666);
+  assert.throws(() => loadConfig(link), /group- or world-writable/, 'the target mode is checked');
+  fs.chmodSync(target, 0o600);
+
+  const badTargetDir = tmpdir();
+  const exposed = writeConfig(badTargetDir, good);
+  fs.chmodSync(badTargetDir, 0o777);
+  t.after(() => fs.chmodSync(badTargetDir, 0o700));
+  const link2 = path.join(linkDir, 'exposed.json');
+  fs.symlinkSync(exposed, link2);
+  assert.throws(() => loadConfig(link2), (e) => e instanceof ConfigError && /directory .* is group- or world-writable/.test(e.message), 'the target directory is checked');
+});
+
+test('a config that is not a regular file is refused without blocking', { skip: POSIX_ONLY }, () => {
+  const dir = tmpdir();
+  const fifo = path.join(dir, 'servers.json');
+  const r = spawnSync('mkfifo', [fifo]);
+  if (r.status !== 0) return;
+  assert.throws(() => loadConfig(fifo), /not a regular file/);
+});

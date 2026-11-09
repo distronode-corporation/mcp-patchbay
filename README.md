@@ -37,11 +37,11 @@ Contents: [Quick start](#quick-start) Â· [Config reference](#config-reference) Â
 This example hosts the public filesystem server
 ([`@modelcontextprotocol/server-filesystem@2.2.0`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)).
 
-1. Write a config file and make it private. The patchbay refuses to start if the file is
-   group- or world-writable.
+1. Write a config file and make it private. The patchbay refuses to start if the file, or the
+   directory it is in, is group- or world-writable.
 
    ```sh
-   mkdir -p ~/.config/mcp-patchbay
+   mkdir -p -m 700 ~/.config/mcp-patchbay
    cat > ~/.config/mcp-patchbay/servers.json <<'EOF'
    {
      "version": 1,
