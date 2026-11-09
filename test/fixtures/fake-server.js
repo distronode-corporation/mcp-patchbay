@@ -13,6 +13,7 @@
 //   FAKE_STDERR         text written to stderr at startup ("\n" separated lines)
 //   FAKE_STDERR_TAIL    text written to stderr at startup with no newline after it
 //   FAKE_EXIT_ON_START  exit with this code before speaking MCP
+//   FAKE_EXIT_IF_EXISTS exit with code 1 before speaking MCP if this path exists
 //   FAKE_NOISE_AT_START=1  print non-JSON lines on stdout before connecting
 //   FAKE_AUTH=1         print an mcp-remote style sign-in prompt on stderr, then wait for
 //                       $FAKE_MARKER_DIR/signed-in to exist before connecting
@@ -63,6 +64,8 @@ if (env.FAKE_STDERR) {
 }
 
 if (env.FAKE_STDERR_TAIL) process.stderr.write(env.FAKE_STDERR_TAIL);
+
+if (env.FAKE_EXIT_IF_EXISTS && fs.existsSync(env.FAKE_EXIT_IF_EXISTS)) process.exit(1);
 
 if (env.FAKE_EXIT_ON_START) {
   process.exit(Number(env.FAKE_EXIT_ON_START));
