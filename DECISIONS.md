@@ -94,6 +94,17 @@ brief.
   unambiguous.
 - **Config owner check.** Beyond the brief's writable check, a config owned by anyone other than
   you or root is also refused (POSIX). That file would not be "your own config".
+- **(review fix) Config symlinks are allowed only if the target passes the same checks.** People
+  often keep dotfiles in a repository and symlink them into `~/.config`, so refusing symlinks
+  outright would break a common setup for little gain. The file is opened once, following the
+  link, and its mode and owner are checked on the descriptor (`fstat`), which is the target.
+  Both the directory holding the link and the directory holding the resolved target must be
+  owned by you or root and must not be group- or world-writable. So nobody else can re-point
+  the link or replace the target. Only the immediate parent directories are checked, not every
+  ancestor.
+- **(review fix) Sticky world-writable directories (`/tmp`) are refused too.** The sticky bit
+  stops others from replacing a file you own, but not from creating the path first, or a
+  symlink, before you do. A config has no reason to live there.
 - **Redaction scope.** The patchbay redacts everything *it* produces about children: logs,
   errors, `servers`/`info`/`enable` output, doctor output, and child error messages it relays.
   - Tool results, tool lists and child instructions are pass-through content and are **not**

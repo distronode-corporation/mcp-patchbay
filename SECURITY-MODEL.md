@@ -15,7 +15,7 @@ protects, what it trusts, and where its guarantees stop. For the protocol detail
 
 | Party | Trusted? | Why |
 |---|---|---|
-| The config file | **Yes** | It is your decision about what may run. Because of that, the patchbay refuses (exit 78) a file that is group- or world-writable, or owned by someone other than you or root (POSIX). |
+| The config file | **Yes** | It is your decision about what may run. Because of that, the patchbay refuses (exit 78) a file that is group- or world-writable, or owned by someone other than you or root, or that sits in a directory that is group- or world-writable or owned by someone else (POSIX). A symlinked config is accepted only if its target, and the target's directory, pass the same checks. The file is opened once, and checked and read through that one descriptor. |
 | The person at the client | Yes | They answer elicitations. |
 | The MCP client (for example Claude Code) | Yes, for transport and UI | The patchbay relies on it to show elicitations faithfully and to enforce per-tool permission rules. |
 | The agent (the model) | **No** | It may be wrong, or steered by prompt injection from any content it reads. |

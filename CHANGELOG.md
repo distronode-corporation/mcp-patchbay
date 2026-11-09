@@ -40,6 +40,10 @@ All notable changes to this project are documented here. The format follows
   startup reaper never fall back to signalling a bare pid. Pidfiles now record the process start
   time (Linux, `v: 2`), and the reaper requires it to match and requires the pid to still lead
   its own process group. 0.1.0 pidfiles, which have no start time, are not trusted on Linux.
+- The config permission check is now complete (POSIX). The file is opened once, `fstat`ed and
+  read through that descriptor (no check-then-read race). A group- or world-writable (or
+  foreign-owned) parent directory is refused. A symlinked config is accepted only if its target
+  and the target's directory pass the same checks. A FIFO is refused without blocking.
 
 ## 0.1.0 - 2026-11-09
 

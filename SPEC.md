@@ -29,13 +29,20 @@ MCP client (e.g. Claude Code)  ⇄ stdio ⇄  mcp-patchbay  ⇄ stdio ⇄  child
 1. `--config <path>`, else `$MCP_PATCHBAY_CONFIG`, else `~/.config/mcp-patchbay/servers.json`.
 2. The file is read exactly once, at startup. Changes need a restart of the patchbay; in Claude
    Code that is `/mcp` → reconnect.
-3. **Refusal (POSIX).** The patchbay stats the file, following symlinks, and refuses to start with
-   exit code **78** (`EX_CONFIG`) and a one-paragraph stderr message in either case:
+3. **Refusal (POSIX).** The patchbay opens the file once (following symlinks, with `O_NONBLOCK`
+   so a FIFO cannot hang it). It then `fstat`s the descriptor and reads from that same
+   descriptor, so the file cannot be swapped between the check and the read. It refuses to start
+   with exit code **78** (`EX_CONFIG`) and a one-paragraph stderr message in any of these cases:
+   - it is not a regular file;
    - the mode has any group- or world-write bit (`mode & 0o022`);
-   - **[resolved]** the owner is neither the current user nor root.
+   - **[resolved]** the owner is neither the current user nor root;
+   - **[review fix]** the directory holding the path, or (for a symlink) the directory holding
+     its resolved target, has a group- or world-write bit (sticky or not), or is owned by neither
+     the current user nor root. Whoever can write that directory can replace the file.
 
-   The second check was added because a file another user can rewrite is not "the person's own
-   config". On Windows both checks are skipped (README known limit).
+   The owner check was added because a file another user can rewrite is not "the person's own
+   config". **Symlinks** are allowed only if the target passes the same checks (see DECISIONS.md).
+   On Windows all of these checks are skipped (README known limit).
 4. Every other config error also exits with 78, and the message names the offending JSON path.
    That includes a missing file, invalid JSON, schema violations and unknown keys.
    **[review fix]** For invalid JSON the message is only `config <file> is not valid JSON (line L,
