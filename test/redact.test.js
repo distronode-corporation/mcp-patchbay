@@ -56,3 +56,15 @@ test('non-string input is stringified', () => {
   assert.equal(redact(new Error('boom https://x.example.com/?a=b')), 'Error: boom https://x.example.com/?[redacted]');
   assert.equal(redact(undefined), '');
 });
+
+test('a remote url is a secret: whole, each path segment of 6+ chars, and each query value', () => {
+  const entry = { url: 'https://mcp.example.com/s/Zk3aQ9xLm2Pq7/mcp?team=acme-team&k=v' };
+  const secrets = secretsFor(entry);
+  assert.ok(secrets.includes(entry.url));
+  assert.ok(secrets.includes('Zk3aQ9xLm2Pq7'));
+  assert.ok(secrets.includes('acme-team'));
+  assert.ok(!secrets.includes('mcp') && !secrets.includes('s'), 'short segments are not secrets');
+  assert.equal(redact(`Connecting to remote server: ${entry.url}`, secrets), 'Connecting to remote server: [redacted]');
+  assert.equal(redact('Connecting to remote server: https://mcp.example.com/s/Zk3aQ9xLm2Pq7/mcp', secrets), 'Connecting to remote server: https://mcp.example.com/s/[redacted]/mcp');
+  assert.equal(redact('GET /s/Zk3aQ9xLm2Pq7/mcp 401', secrets), 'GET /s/[redacted]/mcp 401');
+});
