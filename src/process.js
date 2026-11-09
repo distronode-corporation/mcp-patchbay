@@ -1,6 +1,6 @@
 // Process-tree killing, pidfiles and reaping of leftovers. See SPEC.md §9.
 import { createHash } from 'node:crypto';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -38,20 +38,40 @@ export function commandLineOf(pid) {
       const s = raw.toString('utf8').split('\0').filter((x) => x !== '').join(' ');
       return s || null;
     }
-    if (IS_WINDOWS) {
-      const out = execFileSync('powershell.exe', [
-        '-NoProfile', '-NonInteractive', '-Command',
-        `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
-      ], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], timeout: 10000 });
-      return out.trim() || null;
-    }
-    const out = execFileSync('ps', ['-ww', '-o', 'command=', '-p', String(pid)], {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
-    });
-    return out.trim() || null;
+    const c = commandLineQuery(pid);
+    return execFileSync(c.file, c.args, { ...c.opts, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null;
   } catch {
     return null;
   }
+}
+
+/**
+ * commandLineOf without blocking the event loop on ps / PowerShell (slow on Windows).
+ * @param {number} pid
+ * @returns {Promise<string | null>}
+ */
+export function commandLineOfAsync(pid) {
+  if (process.platform === 'linux' || !Number.isInteger(pid) || pid <= 0) return Promise.resolve(commandLineOf(pid));
+  const c = commandLineQuery(pid);
+  return new Promise((resolve) => {
+    try {
+      execFile(c.file, c.args, c.opts, (err, out) => resolve(err ? null : String(out).trim() || null));
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** The ps / PowerShell query for a process's command line (not used on Linux). @param {number} pid */
+function commandLineQuery(pid) {
+  if (IS_WINDOWS) {
+    return {
+      file: 'powershell.exe',
+      args: ['-NoProfile', '-NonInteractive', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`],
+      opts: { encoding: /** @type {const} */ ('utf8'), windowsHide: true, timeout: 10000 },
+    };
+  }
+  return { file: 'ps', args: ['-ww', '-o', 'command=', '-p', String(pid)], opts: { encoding: /** @type {const} */ ('utf8'), timeout: 5000 } };
 }
 
 /** @param {string} s */
@@ -220,6 +240,9 @@ export class PidFiles {
     this.enabled = this.#prepare();
     /** @type {Set<string>} */
     this.mine = new Set();
+    /** Pids whose command line is still being looked up; remove() drops them. */
+    /** @type {Set<number>} */
+    this.pending = new Set();
   }
 
   #prepare() {
@@ -265,13 +288,18 @@ export class PidFiles {
     if (process.platform === 'linux') {
       write(commandLineOf(pid));
     } else {
-      // ps / PowerShell are slow; do not block the event loop for them.
-      setImmediate(() => write(commandLineOf(pid)));
+      // ps / PowerShell are slow; do not block the event loop for them. A child removed
+      // meanwhile (it exited) gets no pidfile.
+      this.pending.add(pid);
+      commandLineOfAsync(pid).then((cmd) => {
+        if (this.pending.delete(pid)) write(cmd);
+      });
     }
   }
 
   /** @param {number} pid */
   remove(pid) {
+    this.pending.delete(pid);
     const f = this.file(pid);
     this.mine.delete(f);
     try { fs.rmSync(f, { force: true }); } catch { /* already gone */ }
