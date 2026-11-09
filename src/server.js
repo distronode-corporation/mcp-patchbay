@@ -629,9 +629,14 @@ export class Patchbay {
    */
   #onAuthUrl(slot, child, url) {
     if (slot.child !== child || slot.authUrls.has(url)) return;
+    if (slot.state !== 'starting' && slot.state !== 'waiting-for-sign-in') {
+      // Only a start may ask the person to sign in; a child cannot raise the prompt later.
+      this.log.warn(`${slot.name} asked for a sign-in while ${slot.state}; not shown. Restart it to sign in again.`, child.secrets);
+      return;
+    }
     slot.authUrls.add(url);
-    if (slot.state === 'starting') slot.state = 'waiting-for-sign-in';
-    this.log.info(`${slot.name}: waiting for sign-in (${redact(url)})`);
+    slot.state = 'waiting-for-sign-in';
+    this.log.info(`${slot.name}: waiting for sign-in`);
     void this.#askSignIn(slot, child, url);
   }
 
@@ -644,8 +649,9 @@ export class Patchbay {
     await this.whenClientReady();
     if (slot.child !== child) return;
     const caps = this.clientCaps.elicitation;
-    const message = `Sign in to ${slot.name} to finish turning it on.`;
-    const signal = slot.state === 'on' ? undefined : slot.startAbort?.signal;
+    // The URL comes from the child, so the prompt is attributed like a child's own elicitation.
+    const message = `[${slot.name}] Sign in to ${slot.name} to finish turning it on.`;
+    const signal = slot.startAbort?.signal;
     try {
       let r;
       if (caps?.url) {

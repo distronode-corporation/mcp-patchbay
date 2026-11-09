@@ -80,6 +80,13 @@ Two specific mitigations:
 - **Elicitations from children are attributed.** They are forwarded to you with the message
   prefixed `[<server>] `, so a child cannot pass its request off as the patchbay's own
   confirmation. The answer goes only to that child.
+- **Only mcp-remote can trigger a sign-in prompt, and only while it starts.** The sign-in line
+  detector runs only for `url` entries and for commands that are mcp-remote (including
+  `npx mcp-remote`), and only while the server is `starting` or `waiting-for-sign-in`. The
+  prompt is labelled `[<server>] `. So another child cannot show a patchbay "Sign in" prompt with
+  a link of its choosing, and an mcp-remote child that is already on cannot raise one later. A
+  url-mode elicitation still carries a URL chosen by the remote endpoint's sign-in flow; check
+  the host before you sign in.
 - **Sampling is refused.** `sampling/createMessage` from children is refused, so a hosted server
   cannot drive your model through the patchbay.
 

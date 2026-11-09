@@ -39,6 +39,23 @@ const LooseListToolsResultSchema = z.object({
   nextCursor: z.string().optional(),
 }).loose();
 
+const RUNNERS = new Set(['npx', 'pnpx', 'bunx', 'pnpm', 'yarn', 'bun']);
+const MCP_REMOTE_ARG = /^mcp-remote(?:@[^\s/]*)?$/;
+
+/**
+ * Is this entry mcp-remote? Only then is its stderr watched for the sign-in line. True for `url`
+ * entries, for a command whose basename is mcp-remote, and for a package runner (npx, pnpx,
+ * bunx, pnpm, yarn, bun) with an `mcp-remote` or `mcp-remote@<version>` argument.
+ * @param {{kind: string, command?: string, args?: string[]}} entry
+ */
+export function isMcpRemote(entry) {
+  if (entry.kind === 'url') return true;
+  if (typeof entry.command !== 'string') return false;
+  const base = path.basename(entry.command.replace(/\\/g, '/')).replace(/\.(?:cmd|exe|bat|ps1|js|mjs|cjs)$/i, '').toLowerCase();
+  if (base === 'mcp-remote') return true;
+  return RUNNERS.has(base) && (entry.args ?? []).some((a) => MCP_REMOTE_ARG.test(a));
+}
+
 /** Resolves mcp-remote's bin without npx. */
 export function mcpRemoteBin(env = process.env) {
   if (env.MCP_PATCHBAY_MCP_REMOTE_BIN) return env.MCP_PATCHBAY_MCP_REMOTE_BIN;
@@ -341,11 +358,13 @@ export class Child extends EventEmitter {
       // spawn would report this as ENOENT, which reads like "command not found".
       throw new Error('the configured cwd does not exist or is not a directory');
     }
+    // Any other child printing a sign-in line must not get a patchbay sign-in prompt.
+    const watchAuth = isMcpRemote(entry);
     const transport = new ChildProcessTransport({
       ...spec,
       secrets: this.secrets,
       onStderrLine: (raw) => {
-        this.#watchAuth(raw);
+        if (watchAuth) this.#watchAuth(raw);
         log.debug(`[${entry.name}] ${raw}`, this.secrets);
       },
       onSpawn: (pid) => this.o.pidFiles?.record(pid),

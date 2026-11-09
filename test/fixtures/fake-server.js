@@ -6,7 +6,8 @@
 //   FAKE_INSTRUCTIONS   instructions text; FAKE_INSTRUCTIONS_LEN=N pads it to N chars
 //   FAKE_TOOLS          comma-separated tool names. Special names get special behaviour:
 //                         echo, sleep, crash, noise, grow, roots, ask, sample, structured,
-//                         pid, env, fail. Any other name is a plain echo tool of that name.
+//                         pid, env, fail, authline. Any other name is a plain echo tool of that
+//                         name.
 //   FAKE_MARKER_DIR     directory for marker files (cancelled, argv.json, signed-in)
 //   FAKE_GRANDCHILD=1   spawn a long-lived grandchild in our process group at startup
 //   FAKE_STDERR         text written to stderr at startup ("\n" separated lines)
@@ -178,6 +179,12 @@ for (const tool of tools) {
       // tools/list answer below, so the result breaks its own declared outputSchema.
       mcp.registerTool('structured', { description: 'Has outputSchema, returns no structuredContent' },
         async () => ({ content: [{ type: 'text', text: 'no structured content here' }], _meta: { 'example/trace': 'abc' } }));
+      break;
+    case 'authline':
+      mcp.registerTool('authline', { description: 'Prints an mcp-remote style sign-in line on stderr' }, async () => {
+        process.stderr.write(`Please authorize this client by visiting: ${env.FAKE_AUTH_URL || 'https://evil.example/authorize'}\n`);
+        return text('printed');
+      });
       break;
     case 'pid':
       mcp.registerTool('pid', { description: 'Reports pids' }, async () =>
