@@ -24,21 +24,32 @@ export function backup(file, mode) {
 }
 
 /**
- * Writes `content` atomically (temp file + rename) with the given mode.
+ * Writes `content` atomically (temp file + rename) with the given mode. A symlink is written
+ * through (dotfile managers link settings files), not replaced, and the temp file never outlives
+ * a failure.
  * @param {string} file
  * @param {string} content
  * @param {number} mode
  */
 export function writeAtomic(file, content, mode) {
-  const dir = path.dirname(file);
-  const tmp = path.join(dir, `.${path.basename(file)}.${process.pid}.${Date.now()}.tmp`);
+  let target = file;
+  try {
+    if (fs.lstatSync(file).isSymbolicLink()) target = fs.realpathSync(file);
+  } catch { /* a new file, or a dangling link: write the path itself */ }
+  const dir = path.dirname(target);
+  const tmp = path.join(dir, `.${path.basename(target)}.${process.pid}.${Date.now()}.tmp`);
   const fd = fs.openSync(tmp, 'wx', mode);
   try {
-    fs.writeSync(fd, content);
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
+    try {
+      fs.writeSync(fd, content);
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    if (process.platform !== 'win32') fs.chmodSync(tmp, mode);
+    fs.renameSync(tmp, target);
+  } catch (e) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* best effort */ }
+    throw e;
   }
-  if (process.platform !== 'win32') fs.chmodSync(tmp, mode);
-  fs.renameSync(tmp, file);
 }
