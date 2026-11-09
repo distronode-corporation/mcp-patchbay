@@ -59,6 +59,30 @@ export function hashCommandLine(s) {
   return createHash('sha256').update(s).digest('hex');
 }
 
+/**
+ * Linux: the process start time (field 22 of /proc/<pid>/stat, clock ticks since boot) and its
+ * process group id (field 5). Elsewhere, or if the process is gone: null.
+ * @param {number} pid
+ * @returns {{start: string, pgid: number} | null}
+ */
+export function procStat(pid) {
+  if (process.platform !== 'linux' || !Number.isInteger(pid) || pid <= 0) return null;
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    // The command name (field 2) is in parentheses and may contain spaces; fields after it are
+    // plain. parts[0] is field 3.
+    const parts = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    return { pgid: Number(parts[2]), start: parts[19] };
+  } catch {
+    return null;
+  }
+}
+
+/** @param {number} pid @returns {string | undefined} Linux only */
+export function processStartTime(pid) {
+  return procStat(pid)?.start;
+}
+
 /** @param {number} pid */
 export function pidAlive(pid) {
   try {
@@ -75,9 +99,10 @@ export function pidAlive(pid) {
  * Windows: a detached, unref'd `taskkill /T /F /PID` (it outlives us if we exit next).
  * @param {number} pid
  * @param {NodeJS.Signals} [signal]
+ * @param {{bare?: boolean}} [o] bare: false never falls back to signalling the bare pid
  * @returns {boolean} whether anything was signalled
  */
-export function killTree(pid, signal = 'SIGTERM') {
+export function killTree(pid, signal = 'SIGTERM', o = {}) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   if (IS_WINDOWS) {
     try {
@@ -93,6 +118,7 @@ export function killTree(pid, signal = 'SIGTERM') {
     process.kill(-pid, signal);
     return true;
   } catch {
+    if (o.bare === false) return false;
     try {
       process.kill(pid, signal);
       return true;
@@ -100,6 +126,59 @@ export function killTree(pid, signal = 'SIGTERM') {
       return false;
     }
   }
+}
+
+/** Delay before the shutdown helper SIGKILLs the groups that survived SIGTERM. */
+export const SHUTDOWN_KILL_DELAY_MS = 500;
+
+// Runs in a detached `node -e` helper: argv[1] is the delay, argv[2] a JSON list of
+// {pid, start, file}. After the delay it SIGKILLs each group whose leader is either gone
+// (then the id is still reserved by the group's members, or unused) or still the same process
+// (same start time, Linux). Then it removes the pidfiles of leaders that are gone.
+const KILL_HELPER = `
+const fs = require('fs');
+const stat = (pid) => { try { const s = fs.readFileSync('/proc/' + pid + '/stat', 'utf8'); return s.slice(s.lastIndexOf(')') + 2).split(' ')[19]; } catch { return null; } };
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const items = JSON.parse(process.argv[2]);
+setTimeout(() => {
+  for (const it of items) {
+    if (alive(it.pid) && it.start && stat(it.pid) !== it.start) continue;
+    try { process.kill(-it.pid, 'SIGKILL'); } catch {}
+  }
+  setTimeout(() => {
+    for (const it of items) if (it.file && !alive(it.pid)) { try { fs.rmSync(it.file, { force: true }); } catch {} }
+  }, 200);
+}, Number(process.argv[1]));
+`;
+
+/**
+ * POSIX: starts a detached helper that SIGKILLs the given process groups after `delayMs`, so
+ * children that ignore SIGTERM do not outlive the patchbay. Returns at once; the helper is
+ * unref'd and survives our exit.
+ * @param {Array<{pid: number, start?: string, file?: string}>} items
+ * @param {number} [delayMs]
+ */
+export function killGroupsLater(items, delayMs = SHUTDOWN_KILL_DELAY_MS) {
+  if (IS_WINDOWS || !items.length) return;
+  try {
+    const h = spawn(process.execPath, ['-e', KILL_HELPER, String(delayMs), JSON.stringify(items)], { detached: true, stdio: 'ignore' });
+    h.on('error', () => {});
+    h.unref();
+  } catch { /* the reaper of the next start is the fallback */ }
+}
+
+/** How long the reaper waits after SIGTERM before it sends SIGKILL. */
+export const REAP_GRACE_MS = 1000;
+
+/**
+ * Is `pid` still the process a pidfile recorded?
+ * @param {number} pid
+ * @param {any} rec
+ */
+function isLeftover(pid, rec) {
+  if (!pidAlive(pid)) return false;
+  const cmd = commandLineOf(pid);
+  return Boolean(cmd && typeof rec.cmd === 'string' && hashCommandLine(cmd) === rec.cmd);
 }
 
 /** Pidfiles for the children of this patchbay process. */
@@ -149,7 +228,8 @@ export class PidFiles {
       if (!cmd) return;
       const f = this.file(pid);
       try {
-        fs.writeFileSync(f, JSON.stringify({ v: 1, owner: process.pid, pid, cmd: hashCommandLine(cmd), created: new Date().toISOString() }), { mode: 0o600 });
+        const start = processStartTime(pid);
+        fs.writeFileSync(f, JSON.stringify({ v: 2, owner: process.pid, pid, cmd: hashCommandLine(cmd), ...(start ? { start } : {}), created: new Date().toISOString() }), { mode: 0o600 });
         this.mine.add(f);
       } catch (e) {
         this.log.warn(`cannot write pidfile: ${/** @type {Error} */ (e).message}`);
@@ -170,20 +250,15 @@ export class PidFiles {
     try { fs.rmSync(f, { force: true }); } catch { /* already gone */ }
   }
 
-  /** Synchronously removes every pidfile of this process (used during shutdown). */
-  removeAllSync() {
-    for (const f of this.mine) {
-      try { fs.rmSync(f, { force: true }); } catch { /* ignore */ }
-    }
-    this.mine.clear();
-  }
-
   /**
    * Kills leftovers of patchbay processes that died without cleaning up. A leftover is killed only
    * if its owner is gone, it is still alive, and its command line hashes to the recorded value.
-   * @returns {number} how many trees were killed
+   * It gets SIGTERM, then SIGKILL after REAP_GRACE_MS if it is still the same process; its
+   * pidfile is removed only after that, so a patchbay that dies meanwhile leaves it for the next.
+   * @param {number} [graceMs]
+   * @returns {number} how many trees were signalled
    */
-  reap() {
+  reap(graceMs = REAP_GRACE_MS) {
     if (!this.enabled) return 0;
     let killed = 0;
     let files = [];
@@ -201,13 +276,19 @@ export class PidFiles {
       const owner = Number(rec.owner);
       const pid = Number(rec.pid);
       if (owner === process.pid || pidAlive(owner)) continue;
-      if (pidAlive(pid)) {
-        const cmd = commandLineOf(pid);
-        if (cmd && typeof rec.cmd === 'string' && hashCommandLine(cmd) === rec.cmd) {
-          killTree(pid, 'SIGTERM');
-          killed++;
-          this.log.info(`reaped leftover child pid ${pid} of dead patchbay pid ${owner}`);
-        }
+      if (isLeftover(pid, rec)) {
+        killTree(pid, 'SIGTERM');
+        killed++;
+        this.log.info(`reaped leftover child pid ${pid} of dead patchbay pid ${owner}`);
+        const t = setTimeout(() => {
+          if (isLeftover(pid, rec)) {
+            killTree(pid, 'SIGKILL');
+            this.log.info(`leftover child pid ${pid} ignored SIGTERM; sent SIGKILL`);
+          }
+          try { fs.rmSync(full, { force: true }); } catch { /* ignore */ }
+        }, graceMs);
+        t.unref?.();
+        continue;
       }
       try { fs.rmSync(full, { force: true }); } catch { /* ignore */ }
     }

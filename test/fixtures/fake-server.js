@@ -15,6 +15,9 @@
 //   FAKE_AUTH=1         print an mcp-remote style sign-in prompt on stderr, then wait for
 //                       $FAKE_MARKER_DIR/signed-in to exist before connecting
 //   FAKE_DUMP_ARGV=1    write {argv, env subset} to $FAKE_MARKER_DIR/argv.json at startup
+//   FAKE_IGNORE_SIGTERM=1  trap SIGTERM with an empty handler and stay alive after stdin closes
+//                       (the FAKE_GRANDCHILD too)
+//   FAKE_LOG_URL=1      log "Connecting to remote server: <argv[0]>" on stderr, like mcp-remote
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
@@ -44,6 +47,15 @@ if (env.FAKE_DUMP_ARGV === '1') {
   marker(`argv-${name}.json`, JSON.stringify({ argv: process.argv.slice(2), env: picked }));
 }
 
+if (env.FAKE_IGNORE_SIGTERM === '1') {
+  process.on('SIGTERM', () => {});
+  setInterval(() => {}, 1e6);
+}
+
+if (env.FAKE_LOG_URL === '1') {
+  process.stderr.write(`[${process.pid}] Connecting to remote server: ${process.argv[2]}\n`);
+}
+
 if (env.FAKE_STDERR) {
   for (const line of env.FAKE_STDERR.split('\n')) process.stderr.write(line + '\n');
 }
@@ -54,7 +66,9 @@ if (env.FAKE_EXIT_ON_START) {
 
 let grandchildPid = null;
 if (env.FAKE_GRANDCHILD === '1') {
-  const gc = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e6)'], { stdio: 'ignore' });
+  const keep = 'setInterval(() => {}, 1e6)';
+  const script = env.FAKE_IGNORE_SIGTERM === '1' ? `process.on('SIGTERM', () => {}); ${keep}` : keep;
+  const gc = spawn(process.execPath, ['-e', script], { stdio: 'ignore' });
   grandchildPid = gc.pid;
 }
 

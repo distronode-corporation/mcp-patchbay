@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Fixed
+
+- Shutdown no longer orphans children that ignore SIGTERM. A detached helper sends SIGKILL to the
+  remaining process groups after 500 ms, without delaying the patchbay's exit. Pidfiles are kept
+  until a child's exit is observed, and the startup reaper now escalates to SIGKILL. After a
+  crash, the leftover group members also get a SIGKILL follow-up.
+
 ## 0.1.0 - 2026-11-09
 
 ### Added

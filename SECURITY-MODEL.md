@@ -96,7 +96,9 @@ Two specific mitigations:
   argv is readable by other local users through `ps` or `/proc`. The environment of a process is
   readable only by the same user (and root).
 - **Process groups.** Children are detached into their own process group on POSIX. When the
-  patchbay stops, each group is sent SIGTERM synchronously.
+  patchbay stops, each group is sent SIGTERM synchronously. A detached helper sends SIGKILL to
+  any group still there 500 ms later. The pidfiles stay until the exit is seen, so a child that
+  survives both is reaped (SIGTERM, then SIGKILL) at the next start.
 
 ## OAuth tokens
 
