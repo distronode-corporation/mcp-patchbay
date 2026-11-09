@@ -11,6 +11,7 @@
 //   FAKE_MARKER_DIR     directory for marker files (cancelled, argv.json, signed-in)
 //   FAKE_GRANDCHILD=1   spawn a long-lived grandchild in our process group at startup
 //   FAKE_STDERR         text written to stderr at startup ("\n" separated lines)
+//   FAKE_STDERR_TAIL    text written to stderr at startup with no newline after it
 //   FAKE_EXIT_ON_START  exit with this code before speaking MCP
 //   FAKE_NOISE_AT_START=1  print non-JSON lines on stdout before connecting
 //   FAKE_AUTH=1         print an mcp-remote style sign-in prompt on stderr, then wait for
@@ -60,6 +61,8 @@ if (env.FAKE_LOG_URL === '1') {
 if (env.FAKE_STDERR) {
   for (const line of env.FAKE_STDERR.split('\n')) process.stderr.write(line + '\n');
 }
+
+if (env.FAKE_STDERR_TAIL) process.stderr.write(env.FAKE_STDERR_TAIL);
 
 if (env.FAKE_EXIT_ON_START) {
   process.exit(Number(env.FAKE_EXIT_ON_START));

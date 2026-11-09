@@ -112,6 +112,15 @@ test('the patchbay survives a child that dies during initialize', async (t) => {
   assert.equal((await pb.call('ok__echo')).content[0].text, 'fake:echo:{}');
 });
 
+test('a last stderr line without a newline is quoted in the start error', async (t) => {
+  // Shorter than the minimum secret length, so the env value itself is not redacted.
+  const pb = await startPatchbay({ config: { version: 1, servers: { dies: fake({ env: { FAKE_STDERR_TAIL: 'boom!', FAKE_EXIT_ON_START: '1' } }) } } });
+  t.after(() => pb.close());
+  const r = await pb.own('enable', { name: 'dies' });
+  assert.equal(r.isError, true);
+  assert.match(r.text, /last stderr: boom!"/);
+});
+
 test('a child that ignores SIGTERM is gone shortly after the patchbay shuts down', { skip: POSIX_ONLY }, async (t) => {
   const pb = await startPatchbay({ config: { version: 1, servers: { stubborn: fake({ tools: 'pid', env: { FAKE_IGNORE_SIGTERM: '1' } }) } } });
   t.after(() => pb.close());
