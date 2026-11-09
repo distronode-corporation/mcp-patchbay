@@ -33,6 +33,9 @@ All notable changes to this project are documented here. The format follows
   now rejected as unknown servers at load time (exit 78); before, they crashed `initialize`.
   The same `hasOwn` check now covers `import --project` and `rename-permissions`' prefix lookup.
   An env key named `__proto__` is now kept as a key instead of being dropped.
+- A JSON syntax error in the config, in `import --from <claude.json>`, or in the
+  `rename-permissions` settings file is reported as the file path plus line and column. Node's
+  parser message quoted the surrounding text, which could include a token.
 
 ## 0.1.0 - 2026-11-09
 

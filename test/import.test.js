@@ -122,3 +122,15 @@ test('import --project with an inherited key name is "not found"', () => {
     assert.match(r.stderr, new RegExp(`project "${p}" not found`));
   }
 });
+
+test('a JSON syntax error in the Claude config does not echo its contents', () => {
+  const dir = tmpdir();
+  const from = path.join(dir, 'claude.json');
+  fs.writeFileSync(from, '{"mcpServers": {"gh": {"command": "x", "env": {"GITHUB_TOKEN": ghp_abcdefSECRETSECRET}}}}');
+  const r = runImport(['--from', from, '--out', path.join(dir, 'out.json')]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /not valid JSON/);
+  assert.match(r.stderr, /line 1, column 64/);
+  assert.ok(r.stderr.includes(from));
+  assert.ok(!r.stderr.includes('SECRET') && !r.stderr.includes('ghp_') && !r.stderr.includes('TOKEN'), r.stderr);
+});
