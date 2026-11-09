@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fake, isAlive, POSIX_ONLY, startPatchbay, tmpdir, waitFor } from './helpers.js';
-import { commandLineOf, hashCommandLine, pidDirFor, processStartTime } from '../src/process.js';
+import { commandLineOf, commandLineOfAsync, hashCommandLine, pidDirFor, PidFiles, processStartTime } from '../src/process.js';
 
 async function twoChildrenWithGrandchildren(t) {
   const pb = await startPatchbay({
@@ -188,4 +188,32 @@ test('the reaper never signals a live process with another start time, or one th
   await new Promise((r) => setTimeout(r, 1300)); // past the reaper's SIGKILL follow-up
   assert.ok(isAlive(reused.pid), 'a process with another start time is left alone');
   assert.ok(isAlive(member.pid), 'a process that does not lead its own group is left alone');
+});
+
+test('the command line lookup used for pidfiles matches the synchronous one', async () => {
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', 'cmdline-probe'], { stdio: 'ignore' });
+  try {
+    await waitFor(() => commandLineOf(child.pid)?.includes('cmdline-probe'), 10000);
+    assert.equal(await commandLineOfAsync(child.pid), commandLineOf(child.pid));
+    assert.equal(await commandLineOfAsync(-1), null);
+  } finally {
+    child.kill();
+  }
+});
+
+test('a child removed before its command line is read gets no pidfile', { skip: process.platform === 'linux' && 'Linux reads the command line synchronously' }, async () => {
+  const dir = path.join(tmpdir(), 'pids');
+  const pf = new PidFiles(dir, { warn() {}, info() {}, debug() {} });
+  const kept = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
+  try {
+    pf.record(process.pid);
+    pf.remove(process.pid);
+    pf.record(/** @type {number} */ (kept.pid));
+    // Both lookups started together; once the kept one is written, the removed one has had its turn.
+    await waitFor(() => fs.existsSync(pf.file(/** @type {number} */ (kept.pid))), 20000);
+    await new Promise((r) => setTimeout(r, 500));
+    assert.equal(fs.existsSync(pf.file(process.pid)), false);
+  } finally {
+    kept.kill();
+  }
 });
