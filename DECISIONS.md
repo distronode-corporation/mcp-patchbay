@@ -113,7 +113,9 @@ brief.
   - Scrubbing a server's own results would break it. For example, a filesystem server's root
     directory is one of its args.
 - **The sign-in URL is the one deliberate exception.** It goes unredacted to the person, inside
-  the elicitation, because sign-in cannot work otherwise. It never goes to logs or tool output.
+  the elicitation, because sign-in cannot work otherwise. **(review fix)** The patchbay's own log
+  line no longer includes it, not even redacted. mcp-remote's stderr lines that contain it stay
+  in the redacted stderr ring buffer.
 - **Child elicitations are prefixed `[<server>] `.** This attributes them, and stops a child from
   passing its request off as the patchbay's own confirmation. It is a small, deliberate change to
   pass-through.

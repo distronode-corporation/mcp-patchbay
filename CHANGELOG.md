@@ -45,6 +45,15 @@ All notable changes to this project are documented here. The format follows
   foreign-owned) parent directory is refused. A symlinked config is accepted only if its target
   and the target's directory pass the same checks. A FIFO is refused without blocking.
 
+### Documentation
+
+- SECURITY-MODEL.md, SPEC.md and README now say exactly what happens to tool results: they are
+  parsed with `CallToolResultSchema`, which drops unknown keys inside content blocks and
+  rejects unknown content types. The docs no longer claim "unchanged".
+- The redaction guarantee now states its 6-character minimum and covers the url. The sign-in
+  URL text matches the code.
+- README: `npm test` takes about 20 s, not 40 s.
+
 ## 0.1.0 - 2026-11-09
 
 ### Added
