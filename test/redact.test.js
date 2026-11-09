@@ -68,3 +68,13 @@ test('a remote url is a secret: whole, each path segment of 6+ chars, and each q
   assert.equal(redact('Connecting to remote server: https://mcp.example.com/s/Zk3aQ9xLm2Pq7/mcp', secrets), 'Connecting to remote server: https://mcp.example.com/s/[redacted]/mcp');
   assert.equal(redact('GET /s/Zk3aQ9xLm2Pq7/mcp 401', secrets), 'GET /s/[redacted]/mcp 401');
 });
+
+test('redaction stays linear on long runs that look like the start of a url', () => {
+  // Each took tens of seconds at this size before the url rules were bounded.
+  for (const s of ['a.'.repeat(131072), 'http://'.repeat(37449), 'ab://'.repeat(52428)]) {
+    const t = Date.now();
+    redact(s);
+    assert.ok(Date.now() - t < 3000, `${s.slice(0, 8)}... took ${Date.now() - t} ms`);
+  }
+  assert.equal(redact('see https://h.example/p?key=abc and http://h.example/q'), `see https://h.example/p?[redacted] and http://h.example/q`);
+});
