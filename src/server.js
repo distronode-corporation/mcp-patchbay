@@ -339,6 +339,12 @@ export class Patchbay {
       return this.toolEnable(name, extra, o);
     }
     if (slot.state === 'on') return ok(this.#summary(slot, 'already on'));
+    if (slot.startPromise && slot.state === 'off') {
+      // Disabled while starting, and that start has not unwound yet: let it, then start afresh
+      // (asking again: the disable ended the approval).
+      await slot.startPromise;
+      return this.toolEnable(name, extra, o);
+    }
     if (!slot.startPromise && slot.entry.policy === 'confirm' && !o.skipConfirm) {
       const c = await this.#confirm(slot, extra);
       if (!c.ok) return fail(/** @type {string} */ (c.message));

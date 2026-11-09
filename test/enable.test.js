@@ -233,3 +233,18 @@ test('a restart that fails to start again announces that the old tools are gone'
   await waitFor(() => pb.listChanged.count > before);
   assert.deepEqual(await pb.toolNames(), OWN);
 });
+
+test('enable right after disabling a server that was still starting starts it afresh', async (t) => {
+  const markers = tmpdir();
+  const pb = await startPatchbay({ config: { version: 1, servers: { slow: fake({ tools: 'echo', policy: 'allow', env: { FAKE_AUTH: '1', FAKE_MARKER_DIR: markers } }) } } });
+  t.after(() => pb.close());
+  const first = pb.own('enable', { name: 'slow' });
+  await waitFor(async () => (await pb.state('slow')).state === 'starting');
+  fs.writeFileSync(path.join(markers, 'signed-in'), ''); // the next child starts at once
+  const disabled = pb.own('disable', { name: 'slow' });
+  const again = await pb.own('enable', { name: 'slow' });
+  assert.equal(again.isError, false, again.text);
+  assert.equal((await disabled).isError, false);
+  await first;
+  assert.equal((await pb.state('slow')).state, 'on');
+});
