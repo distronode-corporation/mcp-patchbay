@@ -54,7 +54,7 @@ Unknown keys are rejected at every level, with `unknown key "<k>" at <path>`.
 | `.args` | string[] | stdio only |
 | `.env` | `{[K]: string}` | K matches `^[A-Za-z_][A-Za-z0-9_]*$`; allowed for both kinds (for `url` it is passed to mcp-remote) |
 | `.cwd` | absolute path string | stdio only |
-| `.url` | string | `https:`, or `http:` only for loopback hosts (this is mcp-remote's own rule) |
+| `.url` | string | `https:`, or `http:` only for the hosts `localhost` and `127.0.0.1` (this is mcp-remote 0.15.2's own rule) |
 | `.headers` | `{[K]: string}` | url only; K matches `^[A-Za-z0-9_-]+$` (this is mcp-remote's `parseHeaderLine`); values contain no CR/LF |
 | `.prefix` | string | same rules as a server name |
 | `.timeoutMs` | integer `0..2147483647` | default 0 = no cap |
@@ -306,7 +306,8 @@ off ──enable──▶ starting ──initialized+listed──▶ on ──di
                 failed
 ```
 
-- stdio startup timeout: 120 s, covering `initialize` and the first `tools/list`.
+- stdio startup timeout: 120 s for `initialize`, then 60 s for the first `tools/list`. A
+  configured `cwd` that does not exist fails the start with a clear message, before spawning.
 - `lastError` is a redacted one-line message, plus the last stderr line when there is one.
 - A crash means an unexpected exit in any state other than `off`. It marks only that server
   `failed`, drops its tools, sends `list_changed`, sends SIGTERM to the rest of its process group,
@@ -364,7 +365,8 @@ same elicitation is sent, but the state does not change.
   of live owners are left alone (another session is running). Command lines are read from
   `/proc/<pid>/cmdline` on Linux, `ps -ww -o command= -p` on other POSIX systems, and PowerShell
   `Get-CimInstance Win32_Process` on Windows.
-- **Shutdown** on SIGINT, SIGTERM, SIGHUP (POSIX), or stdin `end`/`close`: synchronously, for every
+- **Shutdown** on SIGINT, SIGTERM, SIGHUP (POSIX), SIGBREAK (Windows), stdin `end`/`close`, or
+  `EPIPE` on stdout: synchronously, for every
   child, `process.kill(-pid, "SIGTERM")` on POSIX, or on Windows a detached, unref'd
   `taskkill /T /F /PID`. Then remove the pidfiles with `fs.rmSync` and call `process.exit(0)`. No
   awaits, so it takes milliseconds.
