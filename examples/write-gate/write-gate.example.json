@@ -1,0 +1,4 @@
+{
+  "identities": ["deploy-bot@example.com", "prod-example"],
+  "tools": ["mcp__example-remote__*", "mcp__example-files__write_file"]
+}
