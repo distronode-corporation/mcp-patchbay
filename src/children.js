@@ -17,7 +17,7 @@ import {
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import * as z from 'zod';
-import { killTree } from './process.js';
+import { killTree, pidAlive, SHUTDOWN_KILL_DELAY_MS } from './process.js';
 import { redact, RingBuffer, secretsFor } from './redact.js';
 import { VERSION } from './version.js';
 
@@ -252,10 +252,14 @@ export class ChildProcessTransport {
     this.#finish();
   }
 
-  /** Synchronous kill for shutdown. */
+  /**
+   * Synchronous SIGTERM for shutdown.
+   * @returns {number} the pid that was signalled and has not been seen to exit, or 0
+   */
   killNow() {
     this.closing = true;
-    if (this.pid && !this.exited) killTree(this.pid, 'SIGTERM');
+    if (this.pid && !this.exited && killTree(this.pid, 'SIGTERM')) return this.pid;
+    return 0;
   }
 }
 
@@ -346,10 +350,17 @@ export class Child extends EventEmitter {
       },
       onSpawn: (pid) => this.o.pidFiles?.record(pid),
       onExit: (info) => {
-        if (this.transport?.pid) {
-          // Take down whatever is left of the group, then forget the pidfile.
-          killTree(this.transport.pid, 'SIGTERM');
-          this.o.pidFiles?.remove(this.transport.pid);
+        const pid = this.transport?.pid;
+        if (pid) {
+          // Take down whatever is left of the group (never a bare pid: ours is gone), then
+          // SIGKILL what ignored that. The leader has exited, so the group id stays reserved
+          // while members remain; if a process with that pid exists by then, it is a new one
+          // and its group is left alone.
+          if (killTree(pid, 'SIGTERM', { bare: false })) {
+            const t = setTimeout(() => { if (!pidAlive(pid)) killTree(pid, 'SIGKILL', { bare: false }); }, SHUTDOWN_KILL_DELAY_MS);
+            t.unref?.();
+          }
+          this.o.pidFiles?.remove(pid);
         }
         this.emit('exit', { ...info, expected: this.expectedExit || transport.closing });
       },
@@ -441,13 +452,17 @@ export class Child extends EventEmitter {
     const t = this.transport;
     if (!t) return;
     await t.close();
-    if (t.pid) this.o.pidFiles?.remove(t.pid);
+    // Keep the pidfile of a child that has not been seen to exit, so the reaper can finish it.
+    if (t.pid && t.exited) this.o.pidFiles?.remove(t.pid);
     try { await this.client?.close(); } catch { /* already closed */ }
   }
 
-  /** Synchronous stop for shutdown. */
+  /**
+   * Synchronous stop for shutdown.
+   * @returns {number} the pid still to be confirmed gone, or 0
+   */
   killNow() {
     this.expectedExit = true;
-    this.transport?.killNow();
+    return this.transport?.killNow() ?? 0;
   }
 }
