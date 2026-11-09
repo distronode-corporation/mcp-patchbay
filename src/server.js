@@ -723,7 +723,8 @@ export class Patchbay {
     if (!route) {
       const split = splitExposed(name);
       const slot = split ? this.bySegment.get(split.segment) : undefined;
-      if (slot) return fail(`${slot.name} is not enabled; call enable with {"name": "${slot.name}"} first`, { state: slot.state });
+      // An enabled server without that tool gets the protocol error, not advice to enable it.
+      if (slot && slot.state !== 'on') return fail(`${slot.name} is not enabled; call enable with {"name": "${slot.name}"} first`, { state: slot.state });
       throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${redact(name).slice(0, 200)}`);
     }
     const { slot, original, child } = route;

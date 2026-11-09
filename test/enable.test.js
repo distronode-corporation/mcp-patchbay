@@ -165,6 +165,17 @@ test('disable removes tools and sends list_changed; refused while a call is in f
   assert.match(again.text, /already off/);
 });
 
+test('an unknown tool on an enabled server is a protocol error, not advice to enable it', async (t) => {
+  const pb = await startPatchbay({ config });
+  t.after(() => pb.close());
+  await pb.own('enable', { name: 'example-files' });
+  await assert.rejects(pb.call('example-files__nope', {}), (e) => {
+    assert.equal(/** @type {any} */ (e).code, -32602);
+    assert.match(/** @type {Error} */ (e).message, /Unknown tool: example-files__nope/);
+    return true;
+  });
+});
+
 test('restart replaces the child without asking again when it is on', async (t) => {
   const pb = await startPatchbay({
     config: { version: 1, servers: { 'example-ask': fake({ name: 'ask', tools: 'pid', policy: 'confirm' }) } },
