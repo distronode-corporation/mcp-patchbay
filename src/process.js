@@ -304,11 +304,12 @@ export class PidFiles {
   /**
    * Records a child again once it is serving. A `#!/usr/bin/env node` script (npx and most
    * Node CLIs) still shows `env`'s command line when it is spawned, which the reaper would
-   * later never match.
+   * later never match. Also covers a spawn-time read that found no command line (mid-exec).
+   * The caller passes only a child that is still running.
    * @param {number} pid
    */
   refresh(pid) {
-    if (this.mine.has(this.file(pid)) || this.pending.has(pid)) this.record(pid);
+    this.record(pid);
   }
 
   /** @param {number} pid */

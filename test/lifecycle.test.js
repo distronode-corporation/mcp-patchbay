@@ -241,5 +241,6 @@ test('the pidfile of a #!/usr/bin/env script holds its command line once it serv
   const file = path.join(pidDirFor({ XDG_RUNTIME_DIR: runtime }), `${pb.pid}-${pid}.json`);
   const want = hashCommandLine(/** @type {string} */ (commandLineOf(pid)));
   assert.ok(!commandLineOf(pid)?.startsWith('/usr/bin/env'), 'the script runs as node by now');
-  await waitFor(() => fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).cmd === want, 10000);
+  const read = () => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).cmd : 'no pidfile');
+  await waitFor(() => read() === want, 10000).catch(() => assert.equal(read(), want, `pidfile for ${commandLineOf(pid)}`));
 });
