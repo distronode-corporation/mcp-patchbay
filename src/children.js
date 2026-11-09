@@ -184,6 +184,11 @@ export class ChildProcessTransport {
       proc.stdout?.on('error', () => {});
       proc.stderr?.setEncoding('utf8');
       proc.stderr?.on('data', (chunk) => this.#onStderr(chunk));
+      // A last line without a newline (often the reason a child died) is still a line.
+      proc.stderr?.on('end', () => {
+        if (this.errBuf) this.#stderrLine(this.errBuf.replace(/\r$/, ''));
+        this.errBuf = '';
+      });
       proc.stderr?.on('error', () => {});
       proc.stdin?.on('error', (err) => {
         // EPIPE after the child died: report, never throw.
@@ -237,9 +242,14 @@ export class ChildProcessTransport {
     while ((i = this.errBuf.indexOf('\n')) !== -1) {
       const raw = this.errBuf.slice(0, i).replace(/\r$/, '');
       this.errBuf = this.errBuf.slice(i + 1);
-      this.o.onStderrLine?.(raw);
-      if (raw.trim()) this.stderr.push(redact(raw, this.o.secrets).slice(0, NOISE_LINE_MAX));
+      this.#stderrLine(raw);
     }
+  }
+
+  /** @param {string} raw */
+  #stderrLine(raw) {
+    this.o.onStderrLine?.(raw);
+    if (raw.trim()) this.stderr.push(redact(raw, this.o.secrets).slice(0, NOISE_LINE_MAX));
   }
 
   /** @param {any} message */
