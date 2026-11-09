@@ -99,7 +99,9 @@ export function pidAlive(pid) {
  * Windows: a detached, unref'd `taskkill /T /F /PID` (it outlives us if we exit next).
  * @param {number} pid
  * @param {NodeJS.Signals} [signal]
- * @param {{bare?: boolean}} [o] bare: false never falls back to signalling the bare pid
+ * @param {{bare?: boolean}} [o] bare: false never falls back to signalling the bare pid. The
+ *   fallback is only safe for a child we have not reaped yet (its pid cannot be reused); post-exit
+ *   cleanup and the reaper pass false.
  * @returns {boolean} whether anything was signalled
  */
 export function killTree(pid, signal = 'SIGTERM', o = {}) {
@@ -171,12 +173,37 @@ export function killGroupsLater(items, delayMs = SHUTDOWN_KILL_DELAY_MS) {
 export const REAP_GRACE_MS = 1000;
 
 /**
- * Is `pid` still the process a pidfile recorded?
+ * The process group id of `pid` (POSIX), or null.
+ * @param {number} pid
+ * @returns {number | null}
+ */
+export function processGroupOf(pid) {
+  if (IS_WINDOWS) return null;
+  if (process.platform === 'linux') return procStat(pid)?.pgid ?? null;
+  try {
+    const out = execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 });
+    const g = Number(out.trim());
+    return Number.isInteger(g) && g > 0 ? g : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Is `pid` still the process a pidfile recorded? Its command line must hash to the recorded
+ * value; on Linux its start time must equal the recorded one (a pidfile without it is not
+ * trusted); on POSIX it must still lead its own process group, as the children we spawn do.
  * @param {number} pid
  * @param {any} rec
  */
 function isLeftover(pid, rec) {
   if (!pidAlive(pid)) return false;
+  if (process.platform === 'linux') {
+    const st = procStat(pid);
+    if (!st || typeof rec.start !== 'string' || st.start !== rec.start || st.pgid !== pid) return false;
+  } else if (!IS_WINDOWS && processGroupOf(pid) !== pid) {
+    return false;
+  }
   const cmd = commandLineOf(pid);
   return Boolean(cmd && typeof rec.cmd === 'string' && hashCommandLine(cmd) === rec.cmd);
 }
@@ -277,12 +304,12 @@ export class PidFiles {
       const pid = Number(rec.pid);
       if (owner === process.pid || pidAlive(owner)) continue;
       if (isLeftover(pid, rec)) {
-        killTree(pid, 'SIGTERM');
+        killTree(pid, 'SIGTERM', { bare: false });
         killed++;
         this.log.info(`reaped leftover child pid ${pid} of dead patchbay pid ${owner}`);
         const t = setTimeout(() => {
           if (isLeftover(pid, rec)) {
-            killTree(pid, 'SIGKILL');
+            killTree(pid, 'SIGKILL', { bare: false });
             this.log.info(`leftover child pid ${pid} ignored SIGTERM; sent SIGKILL`);
           }
           try { fs.rmSync(full, { force: true }); } catch { /* ignore */ }

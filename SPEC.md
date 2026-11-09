@@ -386,8 +386,11 @@ open a browser itself. `restart` signs in again through the normal flow.
   only their hash. A pidfile is removed only once the child's exit has been observed (by the
   patchbay, by the shutdown helper, or by a later reaper).
 - **Reaping** at startup: for each pidfile whose owner pid is not alive, if the child pid is alive
-  **and** the hash of its current command line equals `cmd`, the patchbay kills the tree (POSIX
-  `kill(-pid, SIGTERM)`, Windows `taskkill /T /F /PID`). If after 1 s the same process is still
+  **and** the hash of its current command line equals `cmd` **and** (Linux) its start time equals
+  `start` **and** (POSIX) it still leads its own process group, the patchbay kills the tree (POSIX
+  `kill(-pid, SIGTERM)` and never the bare pid, Windows `taskkill /T /F /PID`). On Linux a
+  pidfile without `start` (from 0.1.0) is not trusted. The process group is read from
+  `/proc/<pid>/stat` on Linux and from `ps -o pgid=` elsewhere. If after 1 s the same process is still
   there, it sends SIGKILL to the group, and then removes the pidfile. Otherwise the pidfile is
   removed at once. Pidfiles of live owners are left alone (another session is running). Command lines are read from
   `/proc/<pid>/cmdline` on Linux, `ps -ww -o command= -p` on other POSIX systems, and PowerShell

@@ -88,7 +88,7 @@ test('startup reaps leftovers of a dead patchbay only when the command line stil
   await waitFor(() => commandLineOf(leftover)?.includes('leftover'));
   await waitFor(() => commandLineOf(reused)?.includes('reused-pid'));
   const write = (owner, pid, cmd) =>
-    fs.writeFileSync(path.join(dir, `${owner}-${pid}.json`), JSON.stringify({ v: 1, owner, pid, cmd, created: new Date().toISOString() }), { mode: 0o600 });
+    fs.writeFileSync(path.join(dir, `${owner}-${pid}.json`), JSON.stringify({ v: 2, owner, pid, cmd, start: processStartTime(pid), created: new Date().toISOString() }), { mode: 0o600 });
   write(deadPid, leftover, hashCommandLine(commandLineOf(leftover)));
   write(deadPid, reused, hashCommandLine('some other command line'));
   write(process.pid, otherSession, hashCommandLine(commandLineOf(otherSession)));
@@ -153,4 +153,39 @@ test('after a crash, group members that ignore SIGTERM are SIGKILLed', { skip: P
   await pb.call('bad__crash').catch(() => {});
   await waitFor(async () => (await pb.state('bad')).state === 'failed', 5000);
   await waitFor(() => !isAlive(grandchild), 3000);
+});
+
+test('the reaper never signals a live process with another start time, or one that does not lead its group', { skip: POSIX_ONLY }, async (t) => {
+  const runtime = path.join(tmpdir(), 'rt');
+  fs.mkdirSync(runtime, { mode: 0o700 });
+  const dir = pidDirFor({ XDG_RUNTIME_DIR: runtime });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const deadOwner = Number(spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout);
+  const kill = (pid) => t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } });
+
+  // Leads its own group and runs the recorded command line, but started at another time: the
+  // pid was reused by an unrelated process that happens to look the same.
+  const reused = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e6)', 'reused-start'], { detached: true, stdio: 'ignore' });
+  reused.unref();
+  kill(reused.pid);
+  // Same command line and start time, but in our own process group: not a child we spawned.
+  const member = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e6)', 'not-a-leader'], { stdio: 'ignore' });
+  kill(member.pid);
+  await waitFor(() => commandLineOf(reused.pid)?.includes('reused-start') && commandLineOf(member.pid)?.includes('not-a-leader'));
+
+  const files = [];
+  const write = (pid, start) => {
+    const f = path.join(dir, `${deadOwner}-${pid}.json`);
+    fs.writeFileSync(f, JSON.stringify({ v: 2, owner: deadOwner, pid, cmd: hashCommandLine(commandLineOf(pid)), start, created: new Date().toISOString() }), { mode: 0o600 });
+    files.push(f);
+  };
+  if (process.platform === 'linux') write(reused.pid, String(Number(processStartTime(reused.pid)) + 1));
+  write(member.pid, processStartTime(member.pid));
+
+  const pb = await startPatchbay({ config: { version: 1, servers: {} }, runtime });
+  t.after(() => pb.close());
+  await waitFor(() => files.every((f) => !fs.existsSync(f)), 3000);
+  await new Promise((r) => setTimeout(r, 1300)); // past the reaper's SIGKILL follow-up
+  assert.ok(isAlive(reused.pid), 'a process with another start time is left alone');
+  assert.ok(isAlive(member.pid), 'a process that does not lead its own group is left alone');
 });
