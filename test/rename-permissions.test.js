@@ -137,3 +137,13 @@ test('CLI without --config and without a config file warns that prefixes are unk
   assert.match(r.stderr, /prefix/);
   assert.match(r.stderr, /as-is|as they are/);
 });
+
+test('a JSON syntax error in settings.json does not echo its contents', () => {
+  const dir = tmpdir();
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, '{"env": {"API_TOKEN": sk_live_SECRETSECRET}, "permissions": {}}');
+  const r = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8', env: noConfig() });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /not valid JSON.*line 1, column 23/);
+  assert.ok(!r.stderr.includes('SECRET') && !r.stderr.includes('sk_live') && !r.stderr.includes('TOKEN'), r.stderr);
+});

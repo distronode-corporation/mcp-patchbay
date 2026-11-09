@@ -10,6 +10,7 @@ import {
   resolveConfigPath,
   autostartFor,
   ConfigError,
+  jsonErrorPosition,
 } from '../src/config.js';
 import { CLI, POSIX_ONLY, tmpdir, writeConfig } from './helpers.js';
 
@@ -195,4 +196,31 @@ test('an env key named __proto__ is kept as a plain key', () => {
   const c = validateConfig(JSON.parse('{"version":1,"servers":{"a":{"command":"x","env":{"__proto__":"v1","OK":"v2"}}}}'));
   assert.deepEqual(Object.keys(c.servers.a.env), ['__proto__', 'OK']);
   assert.equal(Object.getPrototypeOf(c.servers.a.env), Object.prototype);
+});
+
+const SECRET_JSON = '{\n  "version": 1,\n  "servers": {\n    "gh": {"command": "x", "env": {"GITHUB_TOKEN": ghp_abcdefSECRETSECRET}}\n  }\n}\n';
+
+test('a JSON syntax error reports the file, line and column, never the text around it', () => {
+  const dir = tmpdir();
+  const p = path.join(dir, 'secret.json');
+  fs.writeFileSync(p, SECRET_JSON, { mode: 0o600 });
+  assert.throws(() => loadConfig(p), (e) => {
+    assert.ok(e instanceof ConfigError);
+    assert.match(e.message, /not valid JSON/);
+    assert.ok(e.message.includes(p), 'names the file');
+    assert.match(e.message, /line 4, column 52/);
+    for (const bit of ['ghp_', 'abcdef', 'SECRET', 'B_TOKEN']) assert.ok(!e.message.includes(bit), `no "${bit}" in ${e.message}`);
+    return true;
+  });
+  const r = spawnSync(process.execPath, [CLI, '--config', p], { encoding: 'utf8', input: '' });
+  assert.equal(r.status, 78);
+  assert.ok(!r.stderr.includes('SECRET') && !r.stderr.includes('ghp_'), r.stderr);
+});
+
+test('jsonErrorPosition finds the offset of the first syntax error', () => {
+  const cases = [
+    ['{"a": tru}', 9], ['{ nope', 2], ['{"a": 1,}', 8], ['', 0], ['{"a":1} x', 8], ['{"k": "v"', 9],
+    ['{"a": "x\ny"}', 8], ['[1, 2', 5], ['{"a": -}', 6], ['{"a": "\\q"}', 8], ['{"a": [1, 2], "b": {"c": null}}', -1],
+  ];
+  for (const [text, want] of cases) assert.equal(jsonErrorPosition(text), want, JSON.stringify(text));
 });

@@ -1,7 +1,7 @@
 // `mcp-patchbay import`: build servers.json from a Claude Code config. See SPEC.md §10.
 import fs from 'node:fs';
 import path from 'node:path';
-import { defaultConfigPath, validateConfig } from './config.js';
+import { defaultConfigPath, jsonSyntaxMessage, validateConfig } from './config.js';
 import { backup, writeAtomic } from './fsutil.js';
 import { isValidSegment } from './naming.js';
 
@@ -59,7 +59,14 @@ function convert(name, def) {
  * @param {{from: string, project?: string, out: string}} o
  */
 export function importClaudeConfig(o) {
-  const raw = JSON.parse(fs.readFileSync(o.from, 'utf8'));
+  const text = fs.readFileSync(o.from, 'utf8');
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    // Never the parser's message: it quotes the text around the error (env values, tokens).
+    throw new Error(jsonSyntaxMessage(o.from, text));
+  }
   /** @type {Record<string, any>} */
   const defs = { ...(raw.mcpServers ?? {}) };
   /** @type {string[]} */
