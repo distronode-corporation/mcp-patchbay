@@ -105,8 +105,8 @@ for (const tool of tools) {
     case 'sleep':
       mcp.registerTool('sleep', {
         description: 'Sleeps for ms milliseconds, reporting progress',
-        inputSchema: { ms: z.number() },
-      }, async ({ ms }, extra) => {
+        inputSchema: { ms: z.number(), settleMs: z.number().optional() },
+      }, async ({ ms, settleMs }, extra) => {
         const token = extra._meta?.progressToken;
         extra.signal.addEventListener('abort', () => marker('cancelled', String(extra.signal.reason ?? 'aborted')));
         const steps = 4;
@@ -120,6 +120,7 @@ for (const tool of tools) {
             });
           }
         }
+        if (settleMs) await sleep(settleMs);
         return text(`slept ${ms}`);
       });
       break;
