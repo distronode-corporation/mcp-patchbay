@@ -379,8 +379,9 @@ export class Child extends EventEmitter {
           // Take down whatever is left of the group (never a bare pid: ours is gone), then
           // SIGKILL what ignored that. The leader has exited, so the group id stays reserved
           // while members remain; if a process with that pid exists by then, it is a new one
-          // and its group is left alone.
-          if (killTree(pid, 'SIGTERM', { bare: false })) {
+          // and its group is left alone. Windows has no group to address: `taskkill /PID` on
+          // the exited pid could hit a process that reused it, so nothing is killed there.
+          if (!IS_WINDOWS && killTree(pid, 'SIGTERM', { bare: false })) {
             const t = setTimeout(() => { if (!pidAlive(pid)) killTree(pid, 'SIGKILL', { bare: false }); }, SHUTDOWN_KILL_DELAY_MS);
             t.unref?.();
           }
