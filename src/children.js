@@ -14,6 +14,7 @@ import {
   JSONRPCMessageSchema,
   ListRootsRequestSchema,
   McpError,
+  ProgressNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import * as z from 'zod';
@@ -308,6 +309,10 @@ export class Child extends EventEmitter {
     this.transport = null;
     /** @type {Client | null} */
     this.client = null;
+    /** Progress callbacks of calls in flight, by the progress token sent to the child. */
+    /** @type {Map<string, (p: any) => void>} */
+    this.progress = new Map();
+    this.progressSeq = 0;
   }
 
   get pid() {
@@ -410,6 +415,13 @@ export class Child extends EventEmitter {
     };
     client.setNotificationHandler(ToolListChangedNotificationSchema, () => { this.emit('tools-changed'); });
     client.setNotificationHandler(ElicitationCompleteNotificationSchema, (n) => { h.elicitationComplete?.(n.params); });
+    // Progress is matched here, not by the SDK's `onprogress`: the SDK runs a notification
+    // handler a microtask late but handles a response at once, dropping its progress handler,
+    // so a last progress notification read in the same chunk as the response was lost.
+    client.setNotificationHandler(ProgressNotificationSchema, (n) => {
+      const { progressToken, ...p } = n.params;
+      this.progress.get(String(progressToken))?.(p);
+    });
     client.onerror = (err) => log.debug(`[${entry.name}] client error: ${err.message}`, this.secrets);
 
     await client.connect(transport, { timeout: timeoutMs });
@@ -444,9 +456,19 @@ export class Child extends EventEmitter {
    * @param {any} params
    * @param {{signal?: AbortSignal, timeout: number, onprogress?: (p: any) => void}} opts
    */
-  call(params, opts) {
+  async call(params, opts) {
     const client = /** @type {Client} */ (this.client);
-    return client.request({ method: 'tools/call', params }, CallToolResultSchema, opts);
+    const { onprogress, ...rest } = opts;
+    if (!onprogress) return client.request({ method: 'tools/call', params }, CallToolResultSchema, rest);
+    const token = `patchbay-${++this.progressSeq}`;
+    this.progress.set(token, onprogress);
+    try {
+      const withToken = { ...params, _meta: { ...params._meta, progressToken: token } };
+      return await client.request({ method: 'tools/call', params: withToken }, CallToolResultSchema, rest);
+    } finally {
+      // A progress notification read with the response is dispatched before this runs.
+      this.progress.delete(token);
+    }
   }
 
   async rootsListChanged() {
