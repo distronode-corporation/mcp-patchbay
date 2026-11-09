@@ -105,3 +105,12 @@ test('redaction: start failures report a redacted error in servers, info and log
   assert.equal((await pb.state('broken')).state, 'failed');
   assert.match((await pb.state('missing')).lastError, /could not start|ENOENT|not found/i);
 });
+
+test('a missing cwd fails the start with a clear message', async (t) => {
+  const pb = await startPatchbay({ config: { version: 1, servers: { nowhere: { ...fake(), cwd: '/path/to/nonexistent-dir-for-test' } } } });
+  t.after(() => pb.close());
+  const r = await pb.own('enable', { name: 'nowhere' });
+  assert.equal(r.isError, true);
+  assert.match(r.text, /cwd does not exist/);
+  assert.equal((await pb.state('nowhere')).state, 'failed');
+});

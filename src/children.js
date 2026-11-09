@@ -333,6 +333,10 @@ export class Child extends EventEmitter {
       if (!IS_WINDOWS) fs.chmodSync(oauth.configDir, 0o700);
     }
     const spec = spawnSpec(entry, oauth, this.o.env ?? process.env);
+    if (spec.cwd && !fs.statSync(spec.cwd, { throwIfNoEntry: false })?.isDirectory()) {
+      // spawn would report this as ENOENT, which reads like "command not found".
+      throw new Error('the configured cwd does not exist or is not a directory');
+    }
     const transport = new ChildProcessTransport({
       ...spec,
       secrets: this.secrets,

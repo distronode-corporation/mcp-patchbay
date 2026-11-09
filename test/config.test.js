@@ -166,3 +166,9 @@ test('autostart picks the project list, else default', () => {
   assert.deepEqual(autostartFor(c, '/path/to/project/'), ['example-remote']);
   assert.deepEqual(autostartFor(c, '/somewhere/else'), ['example-files']);
 });
+
+test('examples/servers.json is a valid config', () => {
+  const p = new URL('../examples/servers.json', import.meta.url);
+  const c = validateConfig(JSON.parse(fs.readFileSync(p, 'utf8')));
+  assert.ok(c.order.length >= 3);
+});
