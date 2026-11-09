@@ -1,7 +1,7 @@
 // `mcp-patchbay rename-permissions`: add mcp__patchbay__ twins of existing MCP permission rules.
 // Never removes or reorders a rule. See SPEC.md §10.
 import fs from 'node:fs';
-import { ConfigError, EX_CONFIG, loadConfig } from './config.js';
+import { ConfigError, EX_CONFIG, loadConfig, resolveConfigPath } from './config.js';
 import { backup, writeAtomic } from './fsutil.js';
 import { CLIENT_PREFIX, MAX_CLIENT_NAME, isValidSegment } from './naming.js';
 
@@ -83,13 +83,23 @@ export async function runRenamePermissions(argv) {
   }
   /** @type {(s: string) => string} */
   let segmentFor = (s) => s;
-  if (configPath) {
+  // Without --config, use the config the patchbay itself would load: its prefixes decide the
+  // real tool names, and a deny rule with the wrong segment would silently stop matching.
+  const explicit = Boolean(configPath);
+  const cfgPath = configPath ?? resolveConfigPath({});
+  if (!explicit && !fs.existsSync(cfgPath)) {
+    process.stderr.write(
+      `rename-permissions: warning: no patchbay config at ${cfgPath}, so server prefixes are unknown. ` +
+      'Names were mapped as-is (mcp__<server>__… → mcp__patchbay__<server>__…). If any server has a ' +
+      '"prefix", these rules will not match its tools; pass --config <servers.json>.\n',
+    );
+  } else {
     try {
-      const cfg = loadConfig(configPath);
-      segmentFor = (s) => cfg.servers[s]?.segment ?? s;
+      const cfg = loadConfig(cfgPath);
+      segmentFor = (s) => (Object.hasOwn(cfg.servers, s) ? cfg.servers[s].segment : s);
     } catch (e) {
       if (e instanceof ConfigError) {
-        process.stderr.write(`rename-permissions: ${e.message}\n`);
+        process.stderr.write(`rename-permissions: ${e.message}${explicit ? '' : ' (pass --config <servers.json> to use another file)'}\n`);
         return EX_CONFIG;
       }
       throw e;

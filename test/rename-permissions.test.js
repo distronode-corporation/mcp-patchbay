@@ -54,13 +54,22 @@ test('--config maps server names to their prefix alias', () => {
   assert.deepEqual(additions.allow, ['mcp__patchbay__files__read_file']);
 });
 
+// No config at the default location, so these runs never depend on the developer's own config.
+const noConfig = () => {
+  const home = tmpdir();
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  delete env.MCP_PATCHBAY_CONFIG;
+  return env;
+};
+
 test('CLI dry run prints a diff and changes nothing; --write backs up then writes', () => {
+  const env = noConfig();
   const dir = tmpdir();
   const file = path.join(dir, 'settings.json');
   const original = JSON.stringify(settings, null, 2) + '\n';
   fs.writeFileSync(file, original, { mode: 0o644 });
 
-  const dry = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8' });
+  const dry = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8', env });
   assert.equal(dry.status, 0, dry.stderr);
   assert.match(dry.stdout, /^\+ permissions\.ask: mcp__patchbay__example-remote__create_item$/m);
   assert.match(dry.stdout, /^\+ permissions\.allow: mcp__patchbay__example-remote__\*$/m);
@@ -68,7 +77,7 @@ test('CLI dry run prints a diff and changes nothing; --write backs up then write
   assert.equal(fs.readFileSync(file, 'utf8'), original);
   assert.equal(fs.readdirSync(dir).length, 1);
 
-  const wr = spawnSync(process.execPath, [CLI, 'rename-permissions', file, '--write'], { encoding: 'utf8' });
+  const wr = spawnSync(process.execPath, [CLI, 'rename-permissions', file, '--write'], { encoding: 'utf8', env });
   assert.equal(wr.status, 0, wr.stderr);
   const backups = fs.readdirSync(dir).filter((f) => f.startsWith('settings.json.bak-'));
   assert.equal(backups.length, 1);
@@ -82,7 +91,7 @@ test('CLI dry run prints a diff and changes nothing; --write backs up then write
   if (!IS_WINDOWS) assert.equal(fs.statSync(file).mode & 0o777, 0o644);
 
   // idempotent: a second run adds nothing
-  const again = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8' });
+  const again = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8', env });
   assert.match(again.stdout, /nothing to add/i);
 });
 
@@ -94,4 +103,37 @@ test('CLI --config uses prefixes', () => {
   const r = spawnSync(process.execPath, [CLI, 'rename-permissions', file, '--config', cfg], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /mcp__patchbay__files__read_file/);
+});
+
+test('CLI without --config loads the default config and applies its prefixes', () => {
+  const dir = tmpdir();
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, JSON.stringify({ permissions: { deny: ['mcp__github__delete_repo'] } }));
+  const cfg = writeConfig(dir, { version: 1, servers: { github: { command: 'x', prefix: 'gh' } } });
+  const viaEnv = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8', env: { ...noConfig(), MCP_PATCHBAY_CONFIG: cfg } });
+  assert.equal(viaEnv.status, 0, viaEnv.stderr);
+  assert.match(viaEnv.stdout, /^\+ permissions\.deny: mcp__patchbay__gh__delete_repo$/m);
+  assert.ok(!viaEnv.stdout.includes('mcp__patchbay__github__'));
+  assert.equal(viaEnv.stderr, '', 'no warning when the config was found');
+
+  const home = tmpdir();
+  fs.mkdirSync(path.join(home, '.config', 'mcp-patchbay'), { recursive: true });
+  writeConfig(path.join(home, '.config', 'mcp-patchbay'), { version: 1, servers: { github: { command: 'x', prefix: 'gh' } } });
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  delete env.MCP_PATCHBAY_CONFIG;
+  const viaHome = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8', env });
+  assert.equal(viaHome.status, 0, viaHome.stderr);
+  assert.match(viaHome.stdout, /mcp__patchbay__gh__delete_repo/);
+});
+
+test('CLI without --config and without a config file warns that prefixes are unknown', () => {
+  const dir = tmpdir();
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, JSON.stringify({ permissions: { deny: ['mcp__github__delete_repo'] } }));
+  const r = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8', env: noConfig() });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /mcp__patchbay__github__delete_repo/);
+  assert.match(r.stderr, /warning/i);
+  assert.match(r.stderr, /prefix/);
+  assert.match(r.stderr, /as-is|as they are/);
 });
