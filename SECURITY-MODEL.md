@@ -16,8 +16,8 @@ protects, what it trusts, and where its guarantees stop. For the protocol detail
 | Party | Trusted? | Why |
 |---|---|---|
 | The config file | **Yes** | It is your decision about what may run. Because of that, the patchbay refuses (exit 78) a file that is group- or world-writable, or owned by someone other than you or root, or that sits in a directory that is group- or world-writable or owned by someone else (POSIX). A symlinked config is accepted only if its target, and the target's directory, pass the same checks. The file is opened once, and checked and read through that one descriptor. |
-| The person at the client | Yes | They answer elicitations. |
-| The MCP client (for example Claude Code) | Yes, for transport and UI | The patchbay relies on it to show elicitations faithfully and to enforce per-tool permission rules. |
+| The person at the client | Yes | They answer elicitations, and with `confirmVia: "host"` the host's permission prompt for `enable_confirm`. |
+| The MCP client (for example Claude Code) | Yes, for transport and UI | The patchbay relies on it to show elicitations faithfully and to enforce per-tool permission rules. With `confirmVia: "host"` the `confirm` guarantee rests on its permission prompt. |
 | The agent (the model) | **No** | It may be wrong, or steered by prompt injection from any content it reads. |
 | Hosted servers (children) | **No** | They are third-party code. Their output, tool descriptions, instructions and requests may be hostile. |
 | Remote MCP endpoints | No | They are reached through mcp-remote. |
@@ -40,9 +40,13 @@ The agent cannot:
   are reachable only under their own names.
 - enable a `deny` server, through any path (`enable`, `restart` or autostart). `deny` servers in
   `autostart` are rejected at load time.
-- enable a `confirm` server without a person.
+- enable a `confirm` server without a person, unless the host's permission settings approve
+  `enable_confirm` for it (`confirmVia: "host"` only; see below).
 
 ## What `confirm` guarantees
+
+`confirmVia` decides who asks the person. With `"elicitation"` (the default) the patchbay asks,
+as described first below. With `"host"` the host asks, as described after that.
 
 - **A person answers.** Before spawning a `confirm` server, the patchbay sends an
   `elicitation/create` request in form mode to the client, with the message
@@ -55,6 +59,32 @@ The agent cannot:
   check. Concurrent enables share one pending question rather than racing past it.
 - **Autostart is the documented exception.** Listing a server in `autostart` is your own consent,
   given in the trusted config.
+
+### With `confirmVia: "host"`
+
+- **The host's permission prompt is the approval.** `enable` and `restart` refuse to start a
+  `confirm` server and the patchbay never elicits. The only way to start one (autostart aside)
+  is the `enable_confirm` tool, and the patchbay treats every call that reaches it as approved.
+  So the guarantee rests entirely on the host asking the person before it runs that tool. The
+  model cannot answer that prompt; the patchbay cannot see whether it was shown.
+- **`enable_confirm` only starts `confirm` servers.** It refuses `allow` and `deny` servers, so a
+  prompt for it always means a `confirm` server is about to start, and the prompt shows the
+  server name the agent chose. It is annotated `destructiveHint: true`, so a host that
+  auto-approves read-only or non-destructive tools still asks.
+- **Anything that skips the prompt approves automatically.** In Claude Code that is:
+  - the `bypassPermissions` mode;
+  - the `dontAsk` mode with the tool allowed;
+  - an allow rule that matches `mcp__patchbay__enable_confirm`: the exact name,
+    `mcp__patchbay__*`, `mcp__patchbay`, or `*`.
+
+  In any of these, the agent can turn on every `confirm` server without a person, exactly as if
+  they were `allow`. `mcp-patchbay doctor` reads your user settings, and a project's with
+  `--project <dir>`, and warns (exit 1) about such rules and about `bypassPermissions`. It
+  cannot see modes chosen on the command line or in a session. `rename-permissions` never writes
+  such a rule.
+- **Fails closed where it can.** Everything that decides a refusal (`deny`, unknown names, the
+  `enable` refusal) is in the patchbay. With `confirmVia: "elicitation"` the tool is not listed,
+  and a call to it is an unknown-tool error.
 
 ## What `confirm` does not guarantee
 
@@ -70,7 +100,8 @@ The agent cannot:
   crash marks the server `failed` as soon as the exit is observed, so a restart after that asks
   again.
 - **It trusts the client's UI.** The guarantee is only as strong as the client's elicitation UI
-  and the person's attention.
+  (or, with `confirmVia: "host"`, its permission prompt and your permission rules) and the
+  person's attention.
 
 ## Prompt injection
 

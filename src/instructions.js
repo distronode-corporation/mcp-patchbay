@@ -1,4 +1,4 @@
-// The patchbay's own `instructions` (initialize result). See SPEC.md §3.2.
+// The patchbay's own `instructions` (initialize result). See SPEC.md §3.4.
 
 export const MAX_INSTRUCTIONS = 4096;
 const CATALOGUE_MAX = 3000;
@@ -8,6 +8,12 @@ const TRUNC = '…[truncated]';
 const HEADER = [
   'mcp-patchbay hosts the MCP servers listed below and can switch them on and off during the session.',
   'Call `servers` for their current state, `enable` {name} to turn one on (its tools then appear as <server>__<tool>; some servers need a person to approve), and `disable` {name} to turn it off again. `info` {name} shows a server\'s own instructions.',
+  'Servers:',
+].join('\n');
+
+const HOST_HEADER = [
+  'mcp-patchbay hosts the MCP servers listed below and can switch them on and off during the session.',
+  'Call `servers` for their current state, `enable` {name} to turn on an allow server, or `enable_confirm` {name} to turn on a confirm server (the host asks the person first). Their tools then appear as <server>__<tool>. `disable` {name} turns one off again. `info` {name} shows a server\'s own instructions.',
   'Servers:',
 ].join('\n');
 
@@ -43,11 +49,13 @@ export function truncate(s, n) {
 /**
  * @param {Array<{name: string, description: string, policy: string, state: string}>} servers
  * @param {Array<{name: string, instructions: string}>} autostarted those that are on and have instructions
+ * @param {{confirmVia?: string}} [o]
  * @returns {string}
  */
-export function buildInstructions(servers, autostarted) {
+export function buildInstructions(servers, autostarted, o = {}) {
+  const header = o.confirmVia === 'host' ? HOST_HEADER : HEADER;
   const lines = [];
-  let used = HEADER.length;
+  let used = header.length;
   for (let i = 0; i < servers.length; i++) {
     const s = servers[i];
     const desc = s.description ? `: ${truncate(s.description, DESCRIPTION_MAX)}` : '';
@@ -62,7 +70,7 @@ export function buildInstructions(servers, autostarted) {
     lines.push(line);
     used += 1 + line.length;
   }
-  let text = `${HEADER}\n${lines.join('\n')}`;
+  let text = `${header}\n${lines.join('\n')}`;
 
   const blocks = autostarted.filter((a) => a.instructions);
   if (blocks.length) {

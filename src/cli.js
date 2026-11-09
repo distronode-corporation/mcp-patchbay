@@ -16,8 +16,10 @@ Usage:
       else ~/.config/mcp-patchbay/servers.json
   mcp-patchbay import --from <claude.json> [--project <dir>] [--out <servers.json>]
       Write a patchbay config from a Claude Code config.
-  mcp-patchbay doctor [--config <path>] [--all]
-      Validate the config and briefly start each allow server (--all: confirm ones too).
+  mcp-patchbay doctor [--config <path>] [--project <dir>] [--all] [--no-start]
+      Validate the config, warn about Claude Code allow rules that would approve
+      enable_confirm (user settings, plus <dir>/.claude with --project), and briefly
+      start each allow server (--all: confirm ones too; --no-start: none).
   mcp-patchbay rename-permissions <settings.json> [--write] [--config <path>]
       Add mcp__patchbay__... twins of mcp__... permission rules (dry run unless --write).
   mcp-patchbay --help | --version

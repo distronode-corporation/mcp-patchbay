@@ -265,3 +265,24 @@ test('a config that is not a regular file is refused without blocking', { skip: 
   if (r.status !== 0) return;
   assert.throws(() => loadConfig(fifo), /not a regular file/);
 });
+
+test('confirmVia defaults to elicitation, accepts host, and rejects anything else', () => {
+  assert.equal(validateConfig({ version: 1, servers: {} }).confirmVia, 'elicitation');
+  assert.equal(validateConfig({ version: 1, confirmVia: 'elicitation', servers: {} }).confirmVia, 'elicitation');
+  assert.equal(validateConfig({ version: 1, confirmVia: 'host', servers: {} }).confirmVia, 'host');
+  for (const v of ['Host', 'prompt', '', true, 1, null, ['host']]) {
+    assert.throws(
+      () => validateConfig({ version: 1, confirmVia: v, servers: {} }),
+      (e) => e instanceof ConfigError && /confirmVia must be one of elicitation, host/.test(e.message),
+      String(v),
+    );
+  }
+});
+
+test('the CLI exits 78 for an invalid confirmVia', () => {
+  const dir = tmpdir();
+  const p = writeConfig(dir, { version: 1, confirmVia: 'sometimes', servers: {} });
+  const r = spawnSync(process.execPath, [CLI, 'doctor', '--config', p, '--no-start'], { encoding: 'utf8' });
+  assert.equal(r.status, 78);
+  assert.match(r.stderr, /confirmVia must be one of/);
+});

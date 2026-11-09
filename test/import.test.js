@@ -47,6 +47,8 @@ test('import maps servers, policy, autostart and skips what it cannot host', () 
   assert.equal(r.status, 0, r.stderr);
   const cfg = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.equal(cfg.version, 1);
+  assert.equal(cfg.confirmVia, 'host', 'Claude Code configs confirm through the host permission prompt');
+  assert.match(r.stdout, /confirmVia: host/);
   assert.deepEqual(Object.keys(cfg.servers).sort(), ['example-files', 'example-project-only', 'example-remote', 'example-sse']);
   assert.deepEqual(cfg.servers['example-files'], {
     description: 'Imported from Claude Code (stdio)',

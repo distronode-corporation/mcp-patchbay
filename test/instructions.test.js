@@ -87,3 +87,10 @@ test('without a project match the default list autostarts', async (t) => {
   assert.ok(names.includes('example-default__echo'));
   assert.ok(!names.includes('other__echo'));
 });
+
+test('with confirmVia host the header names enable_confirm', () => {
+  const servers = [{ name: 'example-remote', description: 'Remote', policy: 'confirm', state: 'off' }];
+  assert.match(buildInstructions(servers, [], { confirmVia: 'host' }), /`enable_confirm` \{name\}/);
+  assert.doesNotMatch(buildInstructions(servers, []), /enable_confirm/);
+  assert.doesNotMatch(buildInstructions(servers, [], { confirmVia: 'elicitation' }), /enable_confirm/);
+});

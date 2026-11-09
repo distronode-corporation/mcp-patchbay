@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- `confirmVia`, a top-level config setting: `"elicitation"` (the default, unchanged behaviour) or
+  `"host"`. With `"host"`, `enable` and `restart` refuse to start a `confirm` server and point to
+  a new tool, `enable_confirm {name}`. The host's own permission prompt for that tool is the
+  person's approval. This makes `confirm` servers usable in clients that do not show form
+  elicitation to the person, such as the Claude Code VS Code extension, which answers it
+  `decline`. `enable_confirm` refuses `allow` and `deny` servers and is listed only in host mode.
+- `import` writes `confirmVia: "host"`.
+- `doctor` prints `confirmVia` and warns about Claude Code allow rules that would approve
+  `enable_confirm` without asking (the exact name, `mcp__patchbay__*`, `mcp__patchbay`, `*` and
+  other wildcards) and about `defaultMode: "bypassPermissions"`, in the user's settings and, with
+  `--project <dir>`, the project's. In host mode a warning exits 1. `--no-start` skips starting
+  servers.
+- `rename-permissions` never writes a rule that matches `enable_confirm`.
+
 ### Fixed
 
 - Shutdown no longer orphans children that ignore SIGTERM. A detached helper sends SIGKILL to the
