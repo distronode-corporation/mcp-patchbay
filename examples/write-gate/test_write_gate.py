@@ -101,6 +101,14 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout.strip(), "")
 
+    def test_a_config_that_is_not_an_object_fails_closed(self):
+        payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}})
+        r = self.run_script(payload, config=["not", "an", "object"])
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)["hookSpecificOutput"]
+        self.assertEqual(out["permissionDecision"], "ask")
+        self.assertIn("config problem", out["permissionDecisionReason"])
+
     def test_garbage_input_fails_closed(self):
         r = self.run_script("not json")
         self.assertEqual(json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
