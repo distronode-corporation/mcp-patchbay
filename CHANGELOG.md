@@ -29,6 +29,10 @@ All notable changes to this project are documented here. The format follows
   the restart. An `enable` in that window joins the restart instead of showing a prompt whose
   answer was ignored. A crash marks the server `failed` at once (it used to wait 20 ms), so a
   restart right after a crash asks a person again.
+- Autostart names that are inherited object keys (`constructor`, `toString`, `__proto__`) are
+  now rejected as unknown servers at load time (exit 78); before, they crashed `initialize`.
+  The same `hasOwn` check now covers `import --project` and `rename-permissions`' prefix lookup.
+  An env key named `__proto__` is now kept as a key instead of being dropped.
 
 ## 0.1.0 - 2026-11-09
 

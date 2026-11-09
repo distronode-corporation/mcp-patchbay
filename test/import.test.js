@@ -111,3 +111,14 @@ test('import fails clearly on a missing --from', () => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /--from/);
 });
+
+test('import --project with an inherited key name is "not found"', () => {
+  const dir = tmpdir();
+  const from = path.join(dir, 'claude.json');
+  fs.writeFileSync(from, JSON.stringify(claudeJson));
+  for (const p of ['constructor', 'toString']) {
+    const r = runImport(['--from', from, '--project', p, '--out', path.join(dir, 'out.json')]);
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, new RegExp(`project "${p}" not found`));
+  }
+});

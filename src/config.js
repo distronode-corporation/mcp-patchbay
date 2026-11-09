@@ -75,7 +75,8 @@ function stringMap(v, at, keyRe, keyWhat) {
   for (const [k, val] of Object.entries(/** @type {object} */ (v))) {
     if (!keyRe.test(k)) throw new ConfigError(`${keyWhat} "${k}" at ${at} is not valid`);
     if (typeof val !== 'string') throw new ConfigError(`${at}.${k} must be a string`);
-    out[k] = val;
+    // defineProperty, not out[k] = …: a key "__proto__" must stay a key, not set the prototype.
+    Object.defineProperty(out, k, { value: val, enumerable: true, writable: true, configurable: true });
   }
   return out;
 }
@@ -215,7 +216,8 @@ export function validateConfig(raw) {
     const names = (v, at) => {
       if (!Array.isArray(v) || !v.every((x) => typeof x === 'string')) throw new ConfigError(`${at} must be an array of server names`);
       for (const n of v) {
-        if (!servers[n]) throw new ConfigError(`${at} names unknown server "${n}"`);
+        // hasOwn: "constructor", "toString" and "__proto__" are inherited, not configured servers.
+        if (!Object.hasOwn(servers, n)) throw new ConfigError(`${at} names unknown server "${n}"`);
         if (servers[n].policy === 'deny') throw new ConfigError(`${at} names "${n}", whose policy is deny`);
       }
       return [...new Set(v)];
