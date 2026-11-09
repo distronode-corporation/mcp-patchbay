@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fake, isAlive, POSIX_ONLY, startPatchbay, tmpdir, waitFor } from './helpers.js';
-import { commandLineOf, hashCommandLine, pidDirFor } from '../src/process.js';
+import { commandLineOf, hashCommandLine, pidDirFor, processStartTime } from '../src/process.js';
 
 async function twoChildrenWithGrandchildren(t) {
   const pb = await startPatchbay({
@@ -110,4 +110,47 @@ test('the patchbay survives a child that dies during initialize', async (t) => {
   assert.equal(r.isError, true);
   assert.equal((await pb.own('enable', { name: 'ok' })).isError, false);
   assert.equal((await pb.call('ok__echo')).content[0].text, 'fake:echo:{}');
+});
+
+test('a child that ignores SIGTERM is gone shortly after the patchbay shuts down', { skip: POSIX_ONLY }, async (t) => {
+  const pb = await startPatchbay({ config: { version: 1, servers: { stubborn: fake({ tools: 'pid', env: { FAKE_IGNORE_SIGTERM: '1' } }) } } });
+  t.after(() => pb.close());
+  await pb.own('enable', { name: 'stubborn' });
+  const childPid = JSON.parse((await pb.call('stubborn__pid')).content[0].text).pid;
+  t.after(() => { try { process.kill(-childPid, 'SIGKILL'); } catch { /* gone */ } });
+  const sent = Date.now();
+  process.kill(pb.pid, 'SIGTERM');
+  await waitFor(() => !isAlive(pb.pid), 2000, 5);
+  assert.ok(Date.now() - sent < 500, 'the patchbay itself exits at once');
+  await waitFor(() => !isAlive(childPid), 3000, 10);
+});
+
+test('a SIGTERM-ignoring child keeps its pidfile until it is gone; the reaper escalates to SIGKILL', { skip: POSIX_ONLY }, async (t) => {
+  const runtime = path.join(tmpdir(), 'rt');
+  fs.mkdirSync(runtime, { mode: 0o700 });
+  const dir = pidDirFor({ XDG_RUNTIME_DIR: runtime });
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const c = spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1e6)', 'stubborn-leftover'], { detached: true, stdio: 'ignore' });
+  c.unref();
+  t.after(() => { try { process.kill(-c.pid, 'SIGKILL'); } catch { /* gone */ } });
+  await waitFor(() => commandLineOf(c.pid)?.includes('stubborn-leftover'));
+  const deadOwner = Number(spawnSync(process.execPath, ['-e', 'process.stdout.write(String(process.pid))'], { encoding: 'utf8' }).stdout);
+  const file = path.join(dir, `${deadOwner}-${c.pid}.json`);
+  fs.writeFileSync(file, JSON.stringify({ v: 2, owner: deadOwner, pid: c.pid, cmd: hashCommandLine(commandLineOf(c.pid)), start: processStartTime(c.pid), created: new Date().toISOString() }), { mode: 0o600 });
+  const pb = await startPatchbay({ config: { version: 1, servers: {} }, runtime });
+  t.after(() => pb.close());
+  await waitFor(() => !isAlive(c.pid), 5000);
+  await waitFor(() => !fs.existsSync(file), 3000);
+});
+
+test('after a crash, group members that ignore SIGTERM are SIGKILLed', { skip: POSIX_ONLY }, async (t) => {
+  const pb = await startPatchbay({ config: { version: 1, servers: { bad: fake({ tools: 'crash,pid', env: { FAKE_GRANDCHILD: '1', FAKE_IGNORE_SIGTERM: '1' } }) } } });
+  t.after(() => pb.close());
+  await pb.own('enable', { name: 'bad' });
+  const { pid, grandchild } = JSON.parse((await pb.call('bad__pid')).content[0].text);
+  t.after(() => { try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ } });
+  assert.ok(isAlive(grandchild));
+  await pb.call('bad__crash').catch(() => {});
+  await waitFor(async () => (await pb.state('bad')).state === 'failed', 5000);
+  await waitFor(() => !isAlive(grandchild), 3000);
 });

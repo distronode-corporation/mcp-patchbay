@@ -141,9 +141,16 @@ brief.
   what it runs (`PATH`, `NODE_OPTIONS`), so it adds no new capability.
 - **Shutdown** also triggers on SIGHUP (POSIX), SIGBREAK (Windows) and EPIPE on stdout. After a
   shutdown nobody can talk to the patchbay anyway.
-- **The exit-time group kill.** When a child exits, the patchbay immediately signals its process
-  group, to clean up grandchildren. Later closes do not signal that group again, so a reused id
-  is never hit.
+- **The exit-time group kill.** When a child exits, the patchbay immediately sends SIGTERM to its
+  process group, to clean up grandchildren. Later closes do not signal that group again.
+  - **(review fix)** There is one follow-up: SIGKILL to the same group 500 ms later, for members
+    that ignore SIGTERM. The leader has exited by then, so the id stays reserved by the kernel
+    while any member is left. A new group with that id needs a new process with that pid as its
+    leader, so the follow-up is skipped when a process with that pid exists.
+- **(review fix) Shutdown escalation.** Shutdown must stay synchronous and fast, so the SIGKILL
+  follow-up runs in a detached `node -e` helper, which the patchbay does not wait for. A
+  child's pidfile is kept until its exit is observed, so if the helper fails, the next start's
+  reaper sends SIGTERM and, 1 s later, SIGKILL.
 
 ## Things deliberately not done
 

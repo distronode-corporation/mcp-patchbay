@@ -15,6 +15,7 @@ import { Child, NO_CAP_MS } from './children.js';
 import { autostartFor } from './config.js';
 import { buildInstructions, truncate } from './instructions.js';
 import { mapTools, splitExposed } from './naming.js';
+import { killGroupsLater, processStartTime } from './process.js';
 import { redact } from './redact.js';
 import { VERSION } from './version.js';
 
@@ -740,12 +741,21 @@ export class Patchbay {
     return buildInstructions(servers, autostarted);
   }
 
-  /** Synchronous: signal every child's process group. Used on SIGINT/SIGTERM/stdin end. */
+  /**
+   * Synchronous: SIGTERM every child's process group, and leave a detached helper that SIGKILLs
+   * the groups that are still there after SHUTDOWN_KILL_DELAY_MS. Pidfiles of children whose
+   * exit was not seen are kept, so if the helper fails the next start's reaper finishes the job.
+   * Used on SIGINT/SIGTERM/stdin end.
+   */
   shutdownSync() {
     this.closed = true;
+    const pending = [];
     for (const slot of this.slots.values()) {
-      try { slot.child?.killNow(); } catch { /* keep going */ }
+      try {
+        const pid = slot.child?.killNow();
+        if (pid) pending.push({ pid, start: processStartTime(pid), file: this.pidFiles?.enabled ? this.pidFiles.file(pid) : undefined });
+      } catch { /* keep going */ }
     }
-    this.pidFiles?.removeAllSync();
+    killGroupsLater(pending);
   }
 }

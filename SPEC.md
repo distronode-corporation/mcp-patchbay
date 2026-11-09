@@ -311,7 +311,9 @@ off ──enable──▶ starting ──initialized+listed──▶ on ──di
 - `lastError` is a redacted one-line message, plus the last stderr line when there is one.
 - A crash means an unexpected exit in any state other than `off`. It marks only that server
   `failed`, drops its tools, sends `list_changed`, sends SIGTERM to the rest of its process group,
-  and removes its pidfile. There is no automatic restart.
+  and removes its pidfile. 500 ms later it sends SIGKILL to that group, unless a process with the
+  leader's pid exists by then (that would be a new process, since ours has exited). The bare pid
+  is never signalled here. There is no automatic restart.
 - Graceful close (disable, restart): close stdin, SIGTERM the group, wait up to 2 s for exit, then
   SIGKILL the group.
 
@@ -357,19 +359,26 @@ same elicitation is sent, but the state does not change.
   `<uid>` is `process.getuid()`, or the sanitised user name on Windows. The directory is created
   at 0700. If it exists but is not a directory owned by us, pidfiles are disabled with a warning
   (protection against symlinks in a shared tmp). The file is `<ownerPid>-<childPid>.json` and
-  contains `{v:1, owner, pid, cmd: sha256(command line as the OS reports it), created}`. No args
-  are stored, only their hash.
+  contains `{v:2, owner, pid, cmd: sha256(command line as the OS reports it), start?, created}`.
+  `start` is the process start time (Linux, field 22 of `/proc/<pid>/stat`). No args are stored,
+  only their hash. A pidfile is removed only once the child's exit has been observed (by the
+  patchbay, by the shutdown helper, or by a later reaper).
 - **Reaping** at startup: for each pidfile whose owner pid is not alive, if the child pid is alive
   **and** the hash of its current command line equals `cmd`, the patchbay kills the tree (POSIX
-  `kill(-pid, SIGTERM)`, Windows `taskkill /T /F /PID`). The pidfile is removed either way. Pidfiles
-  of live owners are left alone (another session is running). Command lines are read from
+  `kill(-pid, SIGTERM)`, Windows `taskkill /T /F /PID`). If after 1 s the same process is still
+  there, it sends SIGKILL to the group, and then removes the pidfile. Otherwise the pidfile is
+  removed at once. Pidfiles of live owners are left alone (another session is running). Command lines are read from
   `/proc/<pid>/cmdline` on Linux, `ps -ww -o command= -p` on other POSIX systems, and PowerShell
   `Get-CimInstance Win32_Process` on Windows.
 - **Shutdown** on SIGINT, SIGTERM, SIGHUP (POSIX), SIGBREAK (Windows), stdin `end`/`close`, or
   `EPIPE` on stdout: synchronously, for every
   child, `process.kill(-pid, "SIGTERM")` on POSIX, or on Windows a detached, unref'd
-  `taskkill /T /F /PID`. Then remove the pidfiles with `fs.rmSync` and call `process.exit(0)`. No
-  awaits, so it takes milliseconds.
+  `taskkill /T /F /PID`. On POSIX it then spawns one detached, unref'd helper (`node -e`) that,
+  500 ms later, sends SIGKILL to each of those groups. It skips a group whose leader pid now
+  belongs to a process with a different start time (Linux). Then it removes the pidfiles of the
+  leaders that are gone. The patchbay does not wait for the helper: it calls `process.exit(0)`
+  straight away. No awaits, so it takes milliseconds. The pidfiles of children that have not
+  been seen to exit are kept, so if the helper fails, the next start's reaper finishes the job.
 - `uncaughtException` and `unhandledRejection` are logged (redacted) and the patchbay keeps
   serving.
 - Logging goes to stderr only, as lines prefixed `[mcp-patchbay]`. stdout carries only MCP
