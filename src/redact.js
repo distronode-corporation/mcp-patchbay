@@ -65,12 +65,34 @@ export function redact(input, secrets = []) {
 }
 
 /**
- * The exact strings to scrub for one server entry: its env values, args and header values.
- * @param {{args?: string[], env?: Record<string,string>, headers?: Record<string,string>}} entry
+ * The parts of a remote url that may carry a credential: the whole url, each path segment, each
+ * query value and the userinfo, raw and decoded. Hosted endpoints often put the key in the path
+ * (https://host/s/<token>/mcp).
+ * @param {string} url
+ * @returns {string[]}
+ */
+function urlSecrets(url) {
+  const out = [url];
+  let u;
+  try { u = new URL(url); } catch { return out; }
+  const dec = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+  for (const seg of u.pathname.split('/')) out.push(seg, dec(seg));
+  for (const pair of u.search.slice(1).split('&')) {
+    const v = pair.slice(pair.indexOf('=') + 1);
+    out.push(v, dec(v.replace(/\+/g, ' ')));
+  }
+  out.push(u.username, dec(u.username), u.password, dec(u.password));
+  return out;
+}
+
+/**
+ * The exact strings to scrub for one server entry: its env values, args, header values and url.
+ * @param {{args?: string[], env?: Record<string,string>, headers?: Record<string,string>, url?: string}} entry
  * @returns {string[]}
  */
 export function secretsFor(entry) {
   const out = [];
+  if (typeof entry.url === 'string') out.push(...urlSecrets(entry.url));
   for (const v of entry.args ?? []) out.push(v);
   for (const v of Object.values(entry.env ?? {})) out.push(v);
   for (const v of Object.values(entry.headers ?? {})) {

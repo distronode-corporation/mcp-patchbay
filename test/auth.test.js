@@ -168,3 +168,30 @@ test('real mcp-remote 0.15.2 bridges a local HTTP server, with headers expanded 
   assert.ok(fs.existsSync(oauthDir));
   assert.ok(!pb.stderr().includes('local-test-token-value'));
 });
+
+test('a token in the remote url path never appears in info, lastError or logs', async (t) => {
+  const TOKEN = 'Zk3aQ9xLm2Pq7';
+  const pb = await startPatchbay({
+    config: {
+      version: 1,
+      servers: {
+        'example-remote': {
+          policy: 'allow',
+          url: `https://mcp.example.com/s/${TOKEN}/mcp`,
+          env: { FAKE_LOG_URL: '1', FAKE_EXIT_ON_START: '3' },
+        },
+      },
+      oauth: { configDir: path.join(tmpdir(), 'oauth'), authTimeoutSeconds: 30 },
+    },
+    env: { MCP_PATCHBAY_MCP_REMOTE_BIN: FAKE, MCP_PATCHBAY_DEBUG: '1' },
+  });
+  t.after(() => pb.close());
+  const r = await pb.own('enable', { name: 'example-remote' });
+  assert.equal(r.isError, true);
+  const servers = await pb.own('servers');
+  const info = await pb.own('info', { name: 'example-remote' });
+  assert.match(info.text, /Connecting to remote server/, 'the line itself is kept');
+  for (const [what, text] of [['enable', r.text], ['servers', servers.text], ['info', info.text], ['logs', pb.stderr()]]) {
+    assert.ok(!text.includes(TOKEN), `${what} must not contain the url token`);
+  }
+});
