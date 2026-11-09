@@ -122,6 +122,14 @@ test('a last stderr line without a newline is quoted in the start error', async 
   assert.match(r.text, /last stderr: boom!"/);
 });
 
+test('the start error quotes the last stderr line after a lot of stderr output', async (t) => {
+  const pb = await startPatchbay({ config: { version: 1, servers: { dies: fake({ env: { FAKE_STDERR_BULK: '1048576', FAKE_STDERR_TAIL: 'boom!', FAKE_EXIT_ON_START: '1' } }) } } });
+  t.after(() => pb.close());
+  const r = await pb.own('enable', { name: 'dies' });
+  assert.equal(r.isError, true);
+  assert.match(r.text, /exited with code 1; last stderr: boom!"/);
+});
+
 test('a child that ignores SIGTERM is gone shortly after the patchbay shuts down', { skip: POSIX_ONLY }, async (t) => {
   const pb = await startPatchbay({ config: { version: 1, servers: { stubborn: fake({ tools: 'pid', env: { FAKE_IGNORE_SIGTERM: '1' } }) } } });
   t.after(() => pb.close());
