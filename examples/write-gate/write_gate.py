@@ -161,12 +161,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     default = os.environ.get("WRITE_GATE_CONFIG") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "write-gate.json")
     parser.add_argument("--config", default=default)
     args = parser.parse_args(argv)
-    raw = sys.stdin.read()
     try:
-        event = json.loads(raw)
+        # Hook input is UTF-8 JSON whatever the locale (cp1252 on many Windows systems).
+        event = json.loads(sys.stdin.buffer.read().decode("utf-8"))
         if not isinstance(event, dict):
             raise ValueError("event is not an object")
-    except ValueError:
+    except ValueError:  # UnicodeDecodeError included
         # Fail closed: we cannot tell what is being called.
         print(json.dumps(ask("write-gate: unreadable hook input; asking to be safe")))
         return 0
@@ -176,7 +176,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         if event.get("hook_event_name", "PreToolUse") == "PreToolUse":
             print(json.dumps(ask(f"write-gate: config problem ({e}); asking to be safe")))
         return 0
-    out = decide(event, config)
+    try:
+        out = decide(event, config)
+    except Exception as e:  # a crash exits non-zero, which Claude Code treats as "go ahead"
+        if event.get("hook_event_name", "PreToolUse") == "PreToolUse":
+            print(json.dumps(ask(f"write-gate: internal error ({type(e).__name__}); asking to be safe")))
+        return 0
     if out is not None:
         print(json.dumps(out))
     return 0

@@ -105,6 +105,41 @@ class ScriptTests(unittest.TestCase):
         r = self.run_script("not json")
         self.assertEqual(json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
 
+    def run_bytes(self, payload, extra_env=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = os.path.join(tmp, "write-gate.json")
+            with open(cfg, "w", encoding="utf-8") as f:
+                json.dump(CONFIG, f)
+            env = dict(os.environ, WRITE_GATE_STATE_DIR=os.path.join(tmp, "state"), **(extra_env or {}))
+            return subprocess.run([sys.executable, SCRIPT, "--config", cfg], input=payload, capture_output=True, env=env, timeout=30)
+
+    def test_utf8_input_is_read_as_utf8_whatever_the_locale(self):
+        payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "mcp__patchbay__example-remote__create_item", "tool_input": {"note": "\u201cquoted\u201d", "owner": "deploy-bot@example.com"}}, ensure_ascii=False).encode("utf-8")
+        r = self.run_bytes(payload, {"PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
+
+    def test_input_that_is_not_utf8_fails_closed(self):
+        r = self.run_bytes(b'{"tool_name": "\xff"}')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
+
+    def test_an_internal_error_fails_closed(self):
+        import contextlib
+        import io
+        from unittest import mock
+        payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Read", "tool_input": {}}).encode("utf-8")
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = os.path.join(tmp, "write-gate.json")
+            with open(cfg, "w", encoding="utf-8") as f:
+                json.dump(CONFIG, f)
+            with mock.patch.object(wg, "decide", side_effect=RuntimeError("boom")), \
+                    mock.patch.object(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload), encoding="utf-8")), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(wg.main(["--config", cfg]), 0)
+        self.assertEqual(json.loads(out.getvalue())["hookSpecificOutput"]["permissionDecision"], "ask")
+
 
 if __name__ == "__main__":
     unittest.main()
