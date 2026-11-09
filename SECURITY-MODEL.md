@@ -74,9 +74,20 @@ The agent cannot:
 
 ## Prompt injection
 
-Tool results, tool descriptions and server instructions from children pass through **unchanged**
-to the agent. The patchbay does not, and cannot, sanitise them semantically. Treat a hosted server
-exactly as you would treat it if it were connected directly.
+Tool descriptions and server instructions from children pass through to the agent unchanged
+(apart from the tool's `name`). Tool results pass through **unsanitised**, but not byte for byte.
+They are parsed with the SDK's `CallToolResultSchema` (SDK 1.32.2), as any SDK client would parse
+them:
+
+- unknown top-level keys and `_meta` are kept;
+- unknown keys inside a content block, inside its `annotations` and inside an embedded
+  `resource` are dropped;
+- a content block of an unknown `type` makes the whole call fail with a JSON-RPC error instead
+  of a result;
+- a missing `content` becomes `[]`.
+
+None of this is a security filter. The patchbay does not, and cannot, sanitise content
+semantically. Treat a hosted server exactly as you would treat it if it were connected directly.
 
 Two specific mitigations:
 
@@ -121,8 +132,12 @@ Two specific mitigations:
   under `oauth.configDir` (default `~/.config/mcp-patchbay/oauth`), which the patchbay creates at
   mode 0700.
 - **The sign-in URL.** It is sent **unredacted** to the person, in a URL-mode elicitation, or in a
-  form-mode message when URL mode is unavailable, because the sign-in needs it. It never goes to
-  logs, errors, or `servers` and `info` output.
+  form-mode message when URL mode is unavailable, because the sign-in needs it. The patchbay
+  itself never writes it to its logs, errors, or `servers` and `info` output. The patchbay's
+  log line says only that a sign-in is pending. mcp-remote's own stderr lines, which contain
+  it, are kept in the redacted stderr ring buffer (`info.stderrTail`), so query parameters such
+  as `state` and `code_challenge` show as `?[redacted]`. With `MCP_PATCHBAY_DEBUG=1` those
+  redacted lines are also copied to the patchbay's stderr.
 - **What mcp-remote does.** mcp-remote itself tries to open a browser. It also listens on a local
   callback port during sign-in.
 
@@ -135,9 +150,14 @@ messages relayed from children.
 - **Patterns.** URL query strings and userinfo, `Bearer`/`Basic` credentials, `key=value` for
   token-like keys, `sk-…`, `ghp_…` and similar prefixes, `github_pat_…`, `xox…-`, AWS key ids,
   JWT-shaped strings, hex runs of 32 or more characters, and mixed-case base64 runs of 40 or more.
-- **Exact values.** The entry's own env values, args and header values (6 characters or longer)
-  are replaced by `[redacted]`. So child args and env never appear in the patchbay's errors,
-  logs or outputs.
+- **Exact values.** The entry's own env values, args and header values, and for remote entries
+  the url (whole, each path segment, each query value, any userinfo), are replaced by
+  `[redacted]`, but **only those 6 characters or longer**. The real guarantee is this: an env
+  value, arg, header value or url part of 6+ characters never appears verbatim in the patchbay's
+  errors, logs, `servers`/`info`/`enable` output or doctor output. Shorter values (a 5-character
+  PIN, a short path segment such as `/mcp`) are not scrubbed. They pass through when a child
+  prints them, unless a pattern above happens to match. Encoded forms (base64, URL-encoded
+  except in the url itself, split across lines) are not matched either.
 - **Not redacted:** tool results, tool lists and child instructions. They are the hosted server's
   own content, and changing them would break servers. A server that prints its own secret in a
   tool result discloses it, exactly as it would when connected directly.

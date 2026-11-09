@@ -254,7 +254,14 @@ The full threat model is in [SECURITY-MODEL.md](SECURITY-MODEL.md). In short:
   crashing child marks only itself `failed`. Children are never restarted automatically.
 - **Redaction.** Errors, logs and the `servers`/`info` output are redacted: URL query strings,
   bearer tokens, `sk-…`, `ghp_…`, JWT-shaped strings, long hex and base64 runs, and the entry's own
-  env, args and header values all become `[redacted]`. Tool results pass through unchanged.
+  env, args, header values and url (path segments, query values) all become `[redacted]`.
+  Exact values are only matched from 6 characters up, so shorter ones are not hidden.
+- **Tool results are not redacted or sanitised.** They are parsed with the SDK's
+  `CallToolResultSchema`, like any SDK client parses them. Unknown keys inside content blocks are
+  dropped, and a content block of an unknown `type` makes the call fail. Everything else passes
+  through as the server sent it.
+- **A remote server's url is on mcp-remote's command line**, so other local users can see it
+  with `ps`. Do not use a url that carries a key if other people share the machine; use a header.
 - **Elicitations from hosted servers** are forwarded to you, prefixed with `[<server>]`.
   Sampling requests from hosted servers are refused.
 - **Process hygiene.** On POSIX each child leads its own process group. Every group gets SIGTERM
@@ -318,7 +325,7 @@ extra process, when a fixed set per subagent is enough.
 
 ```sh
 npm ci
-npm test                                    # node:test, about 40 s
+npm test                                    # node:test, about 20 s
 python3 -m unittest discover -s examples/write-gate -v
 ```
 

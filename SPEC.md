@@ -196,8 +196,16 @@ client    = "mcp__patchbay__" + exposed          (if the patchbay is registered 
 - Forwarding uses `client.request({method:"tools/call", params:{...params, name: original}},
   CallToolResultSchema, opts)`, never `callTool`, so `outputSchema` is not enforced. A result
   that has an `outputSchema` but no `structuredContent` passes through as it is.
-- "Unchanged" means the same as what any SDK client sees: the object comes out of
-  `CallToolResultSchema`, and the SDK's server wrapper parses it again with the same schema.
+- "Unchanged" means the same as what any SDK client sees. The result is parsed with
+  `CallToolResultSchema` (SDK 1.32.2), once by the patchbay's child client and once more by its
+  server, so a result is exactly what any SDK client would see:
+  - unknown **top-level** keys of the result, and `_meta`, are kept;
+  - unknown keys **inside a content block** are dropped, and so are unknown keys inside a
+    block's `annotations` and inside an embedded `resource` object. Known fields such as
+    `text`, `data`, `mimeType`, `uri`, `name` and `_meta` are kept;
+  - a content block of an **unknown `type`** fails validation, so the whole call fails with a
+    JSON-RPC error (InternalError, message redacted) instead of returning the result;
+  - a result without `content` gets `content: []`.
 - `opts.timeout` is `timeoutMs`, or 2147483647 when `timeoutMs` is 0. That is the largest delay
   `setTimeout` accepts, about 24.8 days, which in practice means no cap. `opts.signal` is the
   incoming request's `AbortSignal`.
@@ -267,9 +275,16 @@ appear in … tool results" is read as "the patchbay never puts them there". A h
 answers are the server's business; scrubbing them would break, for example, a filesystem server
 whose root directory is one of its args.
 
+**What is guaranteed.** An exact secret (step 1) of 6+ characters never appears verbatim in
+anything listed above. Values shorter than 6 characters are not scrubbed, and they pass through
+when a child prints them, unless a pattern in steps 2–9 matches. Encoded or split forms of a
+secret are not matched.
+
 The one deliberate exception is the sign-in URL, which is sent **unredacted** to the person in
-the URL-mode elicitation (§8). Without it the sign-in cannot work. It never goes into logs,
-`servers` output or errors.
+the URL-mode elicitation (§8). Without it the sign-in cannot work. The patchbay never writes it
+to its own log lines, `servers` output or errors. mcp-remote's own stderr lines, which contain
+it, are kept in the stderr ring buffer, redacted like any other stderr line (its query string
+becomes `?[redacted]`).
 
 ## 7. Children
 
