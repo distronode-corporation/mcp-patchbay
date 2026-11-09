@@ -1,0 +1,36 @@
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '41 5 * * 2'
+  push:
+    branches: [main]
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5 # TODO-PIN-SHA
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@v2.4.1 # TODO-PIN-SHA
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - uses: actions/upload-artifact@v4 # TODO-PIN-SHA
+        with:
+          name: scorecard-results
+          path: results.sarif
+          retention-days: 5
+      - uses: github/codeql-action/upload-sarif@v4 # TODO-PIN-SHA
+        with:
+          sarif_file: results.sarif
