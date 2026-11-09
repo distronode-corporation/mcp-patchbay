@@ -172,3 +172,27 @@ test('examples/servers.json is a valid config', () => {
   const c = validateConfig(JSON.parse(fs.readFileSync(p, 'utf8')));
   assert.ok(c.order.length >= 3);
 });
+
+test('autostart names that are inherited object keys are unknown servers', () => {
+  for (const n of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    bad((c) => { c.autostart.default = [n]; }, new RegExp(`autostart\\.default names unknown server "${n}"`));
+    bad((c) => { c.autostart.projects = { '/path/to/project': [n] }; }, /unknown server/);
+  }
+  // a server really called "constructor" is fine
+  const c = validateConfig({ version: 1, servers: { constructor: { command: 'x', policy: 'allow' } }, autostart: { default: ['constructor'] } });
+  assert.deepEqual(autostartFor(c, '/anywhere'), ['constructor']);
+});
+
+test('the CLI exits 78 (not a crash) for autostart.default: ["constructor"]', () => {
+  const dir = tmpdir();
+  const p = writeConfig(dir, { version: 1, servers: {}, autostart: { default: ['constructor'] } });
+  const r = spawnSync(process.execPath, [CLI, '--config', p], { encoding: 'utf8', input: '' });
+  assert.equal(r.status, 78, r.stderr);
+  assert.match(r.stderr, /unknown server "constructor"/);
+});
+
+test('an env key named __proto__ is kept as a plain key', () => {
+  const c = validateConfig(JSON.parse('{"version":1,"servers":{"a":{"command":"x","env":{"__proto__":"v1","OK":"v2"}}}}'));
+  assert.deepEqual(Object.keys(c.servers.a.env), ['__proto__', 'OK']);
+  assert.equal(Object.getPrototypeOf(c.servers.a.env), Object.prototype);
+});
