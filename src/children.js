@@ -436,6 +436,7 @@ export class Child extends EventEmitter {
     client.onerror = (err) => log.debug(`[${entry.name}] client error: ${err.message}`, this.secrets);
 
     await client.connect(transport, { timeout: timeoutMs });
+    if (transport.pid && !transport.exited) this.o.pidFiles?.refresh(transport.pid);
     this.instructions = client.getInstructions();
   }
 

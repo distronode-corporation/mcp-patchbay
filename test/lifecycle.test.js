@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { fake, isAlive, POSIX_ONLY, startPatchbay, tmpdir, waitFor } from './helpers.js';
+import { pathToFileURL } from 'node:url';
+import { FAKE, fake, isAlive, POSIX_ONLY, startPatchbay, tmpdir, waitFor } from './helpers.js';
 import { commandLineOf, commandLineOfAsync, hashCommandLine, pidDirFor, PidFiles, processStartTime } from '../src/process.js';
 
 async function twoChildrenWithGrandchildren(t) {
@@ -225,4 +226,20 @@ test('a child removed before its command line is read gets no pidfile', { skip: 
   } finally {
     kept.kill();
   }
+});
+
+test('the pidfile of a #!/usr/bin/env script holds its command line once it serves, not env\'s', { skip: POSIX_ONLY }, async (t) => {
+  const dir = tmpdir();
+  const script = path.join(dir, 'wrapped.mjs');
+  fs.writeFileSync(script, `#!/usr/bin/env node\nawait import(${JSON.stringify(pathToFileURL(FAKE).href)});\n`, { mode: 0o755 });
+  const runtime = path.join(dir, 'rt');
+  fs.mkdirSync(runtime, { mode: 0o700 });
+  const pb = await startPatchbay({ config: { version: 1, servers: { wrapped: { command: script, policy: 'allow', env: { FAKE_TOOLS: 'pid' } } } }, runtime });
+  t.after(() => pb.close());
+  await pb.own('enable', { name: 'wrapped' });
+  const { pid } = JSON.parse((await pb.call('wrapped__pid')).content[0].text);
+  const file = path.join(pidDirFor({ XDG_RUNTIME_DIR: runtime }), `${pb.pid}-${pid}.json`);
+  const want = hashCommandLine(/** @type {string} */ (commandLineOf(pid)));
+  assert.ok(!commandLineOf(pid)?.startsWith('/usr/bin/env'), 'the script runs as node by now');
+  await waitFor(() => fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).cmd === want, 10000);
 });
