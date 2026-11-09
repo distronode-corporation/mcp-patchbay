@@ -65,7 +65,7 @@ export function importClaudeConfig(o) {
   /** @type {string[]} */
   let disabled = [];
   if (o.project) {
-    const proj = raw.projects?.[o.project];
+    const proj = raw.projects && Object.hasOwn(raw.projects, o.project) ? raw.projects[o.project] : undefined;
     if (!proj) throw new Error(`project "${o.project}" not found in ${o.from}`);
     Object.assign(defs, proj.mcpServers ?? {});
     disabled = Array.isArray(proj.disabledMcpServers) ? proj.disabledMcpServers : [];
