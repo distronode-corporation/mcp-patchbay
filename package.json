@@ -1,0 +1,49 @@
+{
+  "name": "mcp-patchbay",
+  "version": "0.1.0",
+  "description": "An MCP server that hosts other MCP servers as child processes and lets the agent switch them on and off mid-session, with a person confirming risky ones.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "proxy",
+    "mcp-server",
+    "tools",
+    "elicitation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/distronode-corporation/mcp-patchbay.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Distronode Corporation",
+  "type": "module",
+  "bin": {
+    "mcp-patchbay": "src/cli.js"
+  },
+  "exports": {
+    ".": "./src/server.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "SECURITY-MODEL.md",
+    "SECURITY.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE",
+    "examples/servers.json"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-reporter=spec \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "mcp-remote": "0.15.2",
+    "zod": "4.6.7"
+  }
+}
