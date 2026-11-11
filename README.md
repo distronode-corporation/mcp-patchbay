@@ -1,5 +1,7 @@
 # mcp-patchbay
 
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16485/badge)](https://www.bestpractices.dev/projects/16485)
+
 > **If you allow `mcp__patchbay` as a whole in your client's permissions, you approve every tool of every server it hosts.**
 > Allow individual tools (`mcp__patchbay__<server>__<tool>`) instead. See [Policy and safety model](#policy-and-safety-model).
 
@@ -370,5 +372,6 @@ and [DECISIONS.md](DECISIONS.md).
 
 Issues and source: <https://github.com/distronode-corporation/mcp-patchbay>.
 Security reports: see [SECURITY.md](SECURITY.md).
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
