@@ -39,3 +39,7 @@ about 40 seconds.
   issues.
 
 By contributing, you agree that your contributions are licensed under the Apache License 2.0.
+
+## Code of conduct
+
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
