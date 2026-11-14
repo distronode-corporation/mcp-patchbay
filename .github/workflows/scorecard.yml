@@ -29,6 +29,10 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
+          # Branch-Protection reads the branch protection and ruleset settings, which
+          # need Administration read access that the workflow's own token lacks.
+          # With the secret unset, the action falls back to that token as before.
+          repo_token: ${{ secrets.SCORECARD_TOKEN }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: scorecard-results
