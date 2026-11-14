@@ -5,7 +5,7 @@ name: Release
 #            "v" + package.json's version, and extracts the release notes;
 #   test     the same test matrix as ci.yml, at the tagged commit, without a cache;
 #   npm      publishes mcp-patchbay to npm with provenance, through npm trusted
-#            publishing (OIDC, no token);
+#            publishing (OIDC, no token), a prerelease version under the `next` dist-tag;
 #   release  creates the GitHub Release for the tag.
 #
 # The npm job is OFF until the repository variable NPM_PUBLISH is 'true', which is set
@@ -164,8 +164,16 @@ jobs:
           npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP"
           echo "TGZ=$RUNNER_TEMP/mcp-patchbay-$VERSION.tgz" >> "$GITHUB_ENV"
 
+      # A prerelease version (one with a `-`, such as 0.2.0-rc.1) goes to the `next`
+      # dist-tag, so `npx mcp-patchbay` keeps resolving to the latest stable release.
       - name: Publish to npm
-        run: npm publish "$TGZ" --provenance --access public --ignore-scripts
+        run: |
+          set -euo pipefail
+          case "$VERSION" in
+            *-*) dist_tag=next ;;
+            *) dist_tag=latest ;;
+          esac
+          npm publish "$TGZ" --provenance --access public --ignore-scripts --tag "$dist_tag"
 
   # The GitHub Release, only once the same version is on npm. The notes are the matching
   # section of CHANGELOG.md (`## <version> - <date>`), or GitHub's generated notes when
@@ -205,9 +213,13 @@ jobs:
             echo "::error::a release for $TAG already exists."
             exit 1
           fi
+          # A prerelease version is a GitHub prerelease too, never marked latest.
+          flags=(--verify-tag --title "mcp-patchbay $TAG")
+          case "$VERSION" in
+            *-*) flags+=(--prerelease --latest=false) ;;
+          esac
           if [ -s "$RUNNER_TEMP/release-notes.md" ]; then
-            gh release create "$TAG" --verify-tag --title "mcp-patchbay $TAG" \
-              --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release create "$TAG" "${flags[@]}" --notes-file "$RUNNER_TEMP/release-notes.md"
           else
-            gh release create "$TAG" --verify-tag --title "mcp-patchbay $TAG" --generate-notes
+            gh release create "$TAG" "${flags[@]}" --generate-notes
           fi
