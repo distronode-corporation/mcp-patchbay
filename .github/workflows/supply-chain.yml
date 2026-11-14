@@ -1,0 +1,42 @@
+name: Supply chain
+
+# What a pull request adds to the dependency tree. The rest of the supply-chain checks
+# live elsewhere:
+#   audit.yml          the whole tree against two advisory databases (npm-audit,
+#                      osv-scanner), weekly and whenever the lockfile changes.
+#   public-hygiene.yml zizmor's static analysis of these workflows.
+#
+# Not a required check: it gates what a pull request adds, and a person reads its result.
+#
+# Pull requests only: the review compares a pull request's base and head, so a push or a
+# manual run has nothing to compare.
+on:
+  pull_request:
+
+# Least privilege at the top level so a job added later starts read-only. Nothing here
+# writes anything back.
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fails a pull request that adds a dependency (npm or an action) with a known
+  # moderate-or-worse vulnerability, or under a licence this Apache-2.0 project cannot
+  # ship. Reads the dependency graph through the API, so nothing is checked out.
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later, LGPL-2.1-only, LGPL-2.1-or-later, LGPL-3.0-only, LGPL-3.0-or-later, SSPL-1.0, BUSL-1.1
