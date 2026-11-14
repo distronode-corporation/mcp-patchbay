@@ -98,6 +98,12 @@ jobs:
       # read here (the active rules for the base branch, from every ruleset that applies)
       # and auto-merge is enabled only while a required status checks rule with at least
       # one check and a pull request rule with at least one required approval are in force.
+      #
+      # Rulesets only, on purpose. This repository protects main with a ruleset and has no
+      # classic branch protection, and reading classic protection needs the Administration
+      # permission, which a GITHUB_TOKEN cannot be granted. A branch protected the classic
+      # way therefore reads as unprotected here, which fails closed: the pull request is
+      # left for a person, never merged early.
       - name: The base branch requires checks and a review
         id: rules
         if: >-
