@@ -13,14 +13,19 @@ and no update check, and it never contacts Distronode or any service of its own.
 mcp-patchbay runs on your computer and stores only these files, all under your control:
 
 - your config, `~/.config/mcp-patchbay/servers.json` (or the path you choose), which you write;
-- sign-in tokens for remote servers you configure, kept by mcp-remote under
-  `~/.config/mcp-patchbay/oauth` (mode 700);
-- small pidfiles in your runtime directory, so leftovers can be cleaned up after a crash.
+- sign-in tokens for remote servers you configure, kept by mcp-remote in the directory set by
+  `oauth.configDir` (by default `~/.config/mcp-patchbay/oauth`, mode 700);
+- small pidfiles in your runtime directory, so leftovers can be cleaned up after a crash;
+- when you run `import` or `rename-permissions --write` yourself, a timestamped `.bak` copy of
+  the file it changes, next to that file.
+
+The modes above apply on macOS and Linux. Windows has no such modes, so there these files get
+the permissions of the folder they are in.
 
 It passes tool calls and results between your MCP client (such as Claude Code or Claude Desktop)
 and the servers you configured. It keeps no copy of them. Its own logs go to stderr, where your
 client keeps them, and are redacted for tokens, query strings and each server's env, args and
-headers.
+headers (values of 6 characters or more; SECURITY-MODEL.md has the exact rules).
 
 ## Third-party sharing
 

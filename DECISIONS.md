@@ -115,7 +115,8 @@ brief.
   exit 78, since a typo in an explicit path must not turn into a silent empty patchbay. An
   existing directory is checked (writable bits, owner) before anything is written, and the file
   is opened with `wx`, so an entry that appeared meanwhile, or a dangling symlink, is never
-  followed or replaced.
+  followed or replaced. A leading `${HOME}` (and `~`) in the path is expanded, because a client
+  may pass the bundle manifest's default through without expanding it.
 - **Redaction scope.** The patchbay redacts everything *it* produces about children: logs,
   errors, `servers`/`info`/`enable` output, doctor output, and child error messages it relays.
   - Tool results, tool lists and child instructions are pass-through content and are **not**

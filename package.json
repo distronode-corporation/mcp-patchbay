@@ -47,9 +47,5 @@
     "@modelcontextprotocol/sdk": "1.32.2",
     "mcp-remote": "0.15.2",
     "zod": "4.6.7"
-  },
-  "homepage": "https://github.com/distronode-corporation/mcp-patchbay#readme",
-  "bugs": {
-    "url": "https://github.com/distronode-corporation/mcp-patchbay/issues"
   }
 }

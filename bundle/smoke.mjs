@@ -55,7 +55,8 @@ child.stdout.on('data', (d) => {
     buf = buf.slice(nl + 1);
     if (!line) continue;
     let msg;
-    try { msg = JSON.parse(line); } catch { continue; }
+    // Anything on stdout that is not JSON-RPC would corrupt a real client's stream.
+    try { msg = JSON.parse(line); } catch { fail(`non-JSON output on stdout: ${line.slice(0, 200)}`); }
     if (msg.id !== undefined && waiting.has(msg.id)) {
       waiting.get(msg.id)(msg);
       waiting.delete(msg.id);

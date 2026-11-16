@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { ConfigError, STARTER_CONFIG, ensureStarterConfig, loadConfig } from '../src/config.js';
+import { ConfigError, STARTER_CONFIG, ensureStarterConfig, expandConfigPath, loadConfig } from '../src/config.js';
 import { CLI, IS_WINDOWS, POSIX_ONLY, ROOT, tmpdir } from './helpers.js';
 
 /** An environment whose home directory is `home`, with no config named anywhere. */
@@ -173,4 +173,34 @@ test('ensureStarterConfig leaves an unreadable default path to loadConfig', { sk
   fs.writeFileSync(path.join(home, '.config'), 'not a directory');
   assert.equal(ensureStarterConfig(configFile(home), home), false);
   assert.throws(() => loadConfig(configFile(home)), (e) => e instanceof ConfigError && /ENOTDIR/.test(e.message));
+});
+
+test('a literal ${HOME} or ~ at the start of --config is expanded, so the bundle default works unexpanded', async () => {
+  for (const spelled of ['${HOME}/.config/mcp-patchbay/servers.json', '~/.config/mcp-patchbay/servers.json']) {
+    const home = tmpdir();
+    const { client } = await connect(home, ['--config', spelled]);
+    try {
+      assert.deepEqual(await serversOf(client), []);
+    } finally {
+      await client.close();
+    }
+    assert.ok(fs.existsSync(configFile(home)), spelled);
+  }
+  assert.equal(expandConfigPath('/path/to/${HOME}/a.json'), '/path/to/${HOME}/a.json');
+  assert.equal(expandConfigPath('${HOMEDIR}/a.json'), '${HOMEDIR}/a.json');
+});
+
+test('--config= with no path is a usage error, not the default', () => {
+  const home = tmpdir();
+  const r = spawnSync(process.execPath, [CLI, '--config='], { encoding: 'utf8', input: '', env: envFor(home) });
+  assert.equal(r.status, 64, r.stderr);
+  assert.match(r.stderr, /--config needs a path/);
+  assert.equal(fs.existsSync(configFile(home)), false);
+});
+
+test('the default path with a trailing separator is not created', () => {
+  const home = tmpdir();
+  assert.equal(ensureStarterConfig(configFile(home) + path.sep, home), false);
+  assert.equal(ensureStarterConfig(configFile(home) + '/', home), false);
+  assert.equal(fs.existsSync(configDir(home)), false);
 });

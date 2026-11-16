@@ -45,9 +45,11 @@ Contents: [Quick start](#quick-start) Â· [Config reference](#config-reference) Â
    ```
 
    That is all the first run needs. When `~/.config/mcp-patchbay/servers.json` does not exist,
-   the patchbay creates it with no servers (`{"version": 1, "servers": {}}`; the directory at
-   mode 700, the file at mode 600), says so in one line on stderr, and serves its own tools.
-   Nothing is switched on and the file holds no secrets.
+   the patchbay creates it with no servers (`{"version": 1, "servers": {}}`), says so in one
+   line on stderr, and serves its own tools. Nothing is switched on and the file holds no
+   secrets. On macOS and Linux the file is mode 600, and the directory, if the patchbay has to
+   create it, mode 700; an existing directory is kept as it is, provided nobody else can write
+   it. Windows has no such modes (see [Known limits](#known-limits)).
 
 2. Then add your connectors. This example hosts the public filesystem server
    ([`@modelcontextprotocol/server-filesystem@2.2.0`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)).
@@ -382,8 +384,8 @@ extra process, when a fixed set per subagent is enough.
 
 mcp-patchbay collects no data and sends nothing to Distronode or anyone else: no telemetry, no
 analytics, no update check. It stores only your config, sign-in tokens for remote servers you
-configure (under `~/.config/mcp-patchbay/oauth`) and pidfiles, all on your computer, until you
-delete them. The servers you configure are separate programs with their own privacy policies.
+configure (in `oauth.configDir`), pidfiles, and the `.bak` copies that `import` and
+`rename-permissions --write` make, all on your computer, until you delete them. The servers you configure are separate programs with their own privacy policies.
 The full policy, with the contact, is [PRIVACY.md](PRIVACY.md).
 
 ## Development

@@ -44,7 +44,7 @@ const samePath = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerC
 
 /**
  * Creates the starter config when `file` is the default config path and nothing is there yet:
- * the directory at 0700 and the file at 0600 (DECISIONS.md, "Zero-config first run"). Any other
+ * a missing directory at 0700 and the file at 0600 (POSIX; Windows has no such modes) (DECISIONS.md, "Zero-config first run"). Any other
  * path is left alone, so a missing `--config` or `$MCP_PATCHBAY_CONFIG` file stays an error in
  * loadConfig. An existing directory must pass checkDirPermissions before anything is written,
  * and an existing entry (a file, or a dangling symlink) is never replaced or followed.
@@ -54,7 +54,8 @@ const samePath = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerC
  */
 export function ensureStarterConfig(file, home = os.homedir()) {
   const def = defaultConfigPath(home);
-  if (samePath(file) !== samePath(def)) return false;
+  // A trailing separator names a directory, which loadConfig must still refuse.
+  if (/[\\/]$/.test(file) || samePath(file) !== samePath(def)) return false;
   try {
     fs.lstatSync(def);
     return false;
@@ -80,7 +81,7 @@ export function ensureStarterConfig(file, home = os.homedir()) {
   }
   try {
     if (posix) fs.fchmodSync(fd, 0o600);
-    fs.writeSync(fd, STARTER_CONFIG);
+    fs.writeFileSync(fd, STARTER_CONFIG); // loops over short writes, unlike writeSync
     fs.fsyncSync(fd);
   } catch (e) {
     // Never leave a half-written file that the next start would report as invalid JSON.
@@ -96,9 +97,20 @@ export function ensureStarterConfig(file, home = os.homedir()) {
  * @param {{flag?: string, env?: NodeJS.ProcessEnv}} o
  */
 export function resolveConfigPath({ flag, env = process.env }) {
-  if (flag) return flag;
-  if (env.MCP_PATCHBAY_CONFIG) return env.MCP_PATCHBAY_CONFIG;
+  if (flag) return expandConfigPath(flag);
+  if (env.MCP_PATCHBAY_CONFIG) return expandConfigPath(env.MCP_PATCHBAY_CONFIG);
   return defaultConfigPath();
+}
+
+/**
+ * Expands a leading `~` or `${HOME}` in a config path. A client that runs the Claude Desktop
+ * bundle may pass the manifest's default (`${HOME}/...`) through unexpanded; nothing else in
+ * the path is touched.
+ * @param {string} p
+ */
+export function expandConfigPath(p) {
+  if (p === '${HOME}' || p.startsWith('${HOME}/') || p.startsWith('${HOME}\\')) return os.homedir() + p.slice('${HOME}'.length);
+  return expandHome(p);
 }
 
 /** @param {string} p */

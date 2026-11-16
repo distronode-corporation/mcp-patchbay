@@ -9,11 +9,13 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - Zero-config first run. When the default config, `~/.config/mcp-patchbay/servers.json`, does
-  not exist, the patchbay creates it with no servers (`{"version": 1, "servers": {}}`, the
-  directory at mode 700 and the file at mode 600), logs one stderr line saying where and how to
-  add servers, and serves its own tools. Before, it exited 78. An existing group- or
+  not exist, the patchbay creates it with no servers (`{"version": 1, "servers": {}}`; on POSIX
+  the file at mode 600 and, if it has to create it, the directory at mode 700), logs one stderr
+  line saying where and how to add servers, and serves its own tools. Before, it exited 78. An existing group- or
   world-writable directory is still refused before anything is written, and a missing
   `--config` or `$MCP_PATCHBAY_CONFIG` file anywhere else is still an error (exit 78).
+- A leading `~` or `${HOME}` in `--config` and `$MCP_PATCHBAY_CONFIG` is expanded. An empty
+  `--config=` is now a usage error (exit 64) instead of meaning the default.
 - MCP Registry listing as `io.github.distronode-corporation/mcp-patchbay`: `server.json`, the
   `mcpName` field in `package.json`, and a release step that publishes it with
   `mcp-publisher` through GitHub OIDC once the npm version is out.

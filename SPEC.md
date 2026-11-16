@@ -47,12 +47,15 @@ MCP client (e.g. Claude Code)  ⇄ stdio ⇄  mcp-patchbay  ⇄ stdio ⇄  child
    That includes a missing file, invalid JSON, schema violations and unknown keys.
    **[0.1.1]** One exception, the first run: when the path is the default
    `~/.config/mcp-patchbay/servers.json` (however it was named) and nothing exists there,
-   `serve` creates the directory at 0700 (if missing) and the file at 0600 with
+   `serve` creates the directory at 0700 (if missing; an existing one keeps its mode) and the
+   file at 0600 (POSIX) with
    `{"version": 1, "servers": {}}`, logs one stderr line naming the file and pointing at the
    README's Quick start, and serves with zero servers. An existing directory must pass the checks
    in item 3 before anything is written; an existing entry, even a dangling symlink, is never
    replaced or followed. Any other `--config` or `$MCP_PATCHBAY_CONFIG` path that is missing is
-   still an error (78). `doctor`, `import` and `rename-permissions` never create it.
+   still an error (78). `doctor` and `rename-permissions` never create it, and `import` writes
+   it only as its own output, never as a starter. A leading `~` or `${HOME}` in `--config` or
+   `$MCP_PATCHBAY_CONFIG` is expanded first; `--config=` with no path exits 64.
    **[review fix]** For invalid JSON the message is only `config <file> is not valid JSON (line L,
    column C)`. The parser's own message is never shown, because Node quotes the text around the
    error (`Unexpected token 'g', ..."B_TOKEN": ghp_abc"...`), and that text may be a secret. The

@@ -70,12 +70,16 @@ async function serve(argv) {
     process.stderr.write(`mcp-patchbay: unknown option --${unknown[0]}\n\n${USAGE}`);
     process.exit(64);
   }
+  if (flags.config === '') {
+    process.stderr.write(`mcp-patchbay: --config needs a path\n\n${USAGE}`);
+    process.exit(64);
+  }
   const configPath = resolveConfigPath({ flag: /** @type {string | undefined} */ (flags.config) });
   let config;
   try {
     if (ensureStarterConfig(configPath)) {
       log.info(
-        `created a starter config with no servers at ${configPath} (only you can read or change it). ` +
+        `created a starter config with no servers at ${configPath}. ` +
         `Add your connectors to it as the README's Quick start shows ` +
         `(https://github.com/distronode-corporation/mcp-patchbay#quick-start), then reconnect.`,
       );
