@@ -4,16 +4,20 @@ name: Release
 #   guard    refuses a tag whose commit is not on main, or whose name is not
 #            "v" + package.json's version, and extracts the release notes;
 #   test     the same test matrix as ci.yml, at the tagged commit, without a cache;
+#   bundle   builds and validates the Claude Desktop extension bundle (.mcpb) at the tagged
+#            commit, and smoke-tests it;
 #   npm      publishes mcp-patchbay to npm with provenance, through npm trusted
 #            publishing (OIDC, no token), a prerelease version under the `next` dist-tag;
-#   release  creates the GitHub Release for the tag.
+#   registry publishes server.json to the MCP Registry once that npm version is out, signed
+#            in with GitHub OIDC (no token);
+#   release  creates the GitHub Release for the tag, with the bundle attached.
 #
 # The npm job is OFF until the repository variable NPM_PUBLISH is 'true', which is set
 # only once the `mcp-patchbay` package on npm has a trusted publisher naming this
 # repository and this file, release.yml, with no environment. Renaming this file or
 # adding an environment breaks publishing until that entry is changed to match. While
-# NPM_PUBLISH is off, the npm job is skipped and so is the release job, so a tag never
-# gets a GitHub Release that has no matching npm version.
+# NPM_PUBLISH is off, the npm job is skipped and so are the registry and release jobs, so a
+# tag never gets a registry entry or a GitHub Release that has no matching npm version.
 on:
   push:
     tags: ['v*']
@@ -104,6 +108,45 @@ jobs:
       - name: write-gate example tests
         run: python -m unittest discover -s examples/write-gate -v
 
+  # The Claude Desktop extension bundle, built at the tagged commit with the pinned MCPB CLI
+  # (bundle/build.mjs: `mcpb validate`, then `mcpb pack`), started once as its manifest says
+  # (bundle/smoke.mjs), and handed to the release job. ci.yml smoke-tests it on macOS and
+  # Windows too.
+  bundle:
+    name: bundle (.mcpb)
+    needs: [guard, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Build and validate the bundle
+        run: node bundle/build.mjs --out "$RUNNER_TEMP/bundle"
+      - name: Smoke-test the bundle
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/unpacked"
+          unzip -q "$RUNNER_TEMP/bundle/mcp-patchbay-$VERSION.mcpb" -d "$RUNNER_TEMP/unpacked"
+          node bundle/smoke.mjs "$RUNNER_TEMP/unpacked"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mcpb
+          path: ${{ runner.temp }}/bundle/mcp-patchbay-${{ needs.guard.outputs.version }}.mcpb
+          if-no-files-found: error
+          retention-days: 7
+
   # Trusted publishing: npm exchanges this job's OIDC token for a one-time publish token
   # (npm 11.5.1 or later) and adds the provenance attestation itself. No NPM_TOKEN.
   npm:
@@ -175,12 +218,77 @@ jobs:
           esac
           npm publish "$TGZ" --provenance --access public --ignore-scripts --tag "$dist_tag"
 
-  # The GitHub Release, only once the same version is on npm. The notes are the matching
-  # section of CHANGELOG.md (`## <version> - <date>`), or GitHub's generated notes when
-  # the tag has none.
+  # The MCP Registry entry, io.github.distronode-corporation/mcp-patchbay, from server.json.
+  # The registry checks that the npm package's `mcpName` names this server, so this waits
+  # until npm serves the new version. `mcp-publisher login github-oidc` exchanges this job's
+  # OIDC token for a registry token for the io.github.distronode-corporation namespace; no
+  # secret is stored. The binary is the upstream release checked against a pinned SHA-256
+  # (keep it equal to ci.yml's server-json job).
+  registry:
+    name: MCP Registry publish
+    needs: [guard, npm]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read # the checkout
+      id-token: write # the OIDC token mcp-publisher exchanges for a registry token
+    env:
+      VERSION: ${{ needs.guard.outputs.version }}
+      MCP_PUBLISHER_VERSION: 1.8.7
+      MCP_PUBLISHER_SHA256: 00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: server.json is for this version
+        run: |
+          set -euo pipefail
+          have="$(jq -r .version server.json)"
+          pkg="$(jq -r '.packages[] | select(.registryType == "npm") | .version' server.json)"
+          if [ "$have" != "$VERSION" ] || [ "$pkg" != "$VERSION" ]; then
+            echo "::error::server.json says $have (npm package $pkg), the release is $VERSION."
+            exit 1
+          fi
+
+      # Asked without credentials, for up to five minutes: the registry reads the same URL.
+      - name: npm serves the new version with its mcpName
+        run: |
+          set -euo pipefail
+          want="$(jq -r .name server.json)"
+          for _ in $(seq 1 30); do
+            got="$(curl -fsS "https://registry.npmjs.org/mcp-patchbay/$VERSION" | jq -r '.mcpName // empty' || true)"
+            if [ "$got" = "$want" ]; then echo "npm serves mcp-patchbay@$VERSION with mcpName $got"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::npm did not serve mcp-patchbay@$VERSION with mcpName $want within five minutes."
+          exit 1
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" mcp-publisher
+          "$RUNNER_TEMP/mcp-publisher" --version
+
+      - name: Sign in to the MCP Registry
+        run: '"$RUNNER_TEMP/mcp-publisher" login github-oidc'
+
+      - name: Publish server.json
+        run: '"$RUNNER_TEMP/mcp-publisher" publish server.json'
+
+  # The GitHub Release, only once the same version is on npm, with the bundle attached. The
+  # notes are the matching section of CHANGELOG.md (`## <version> - <date>`), or GitHub's
+  # generated notes when the tag has none.
   release:
     name: GitHub release
-    needs: [guard, npm]
+    needs: [guard, npm, bundle]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -197,6 +305,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mcpb
+          path: ${{ runner.temp }}/bundle
 
       - name: Extract release notes from CHANGELOG
         run: |
@@ -218,8 +331,13 @@ jobs:
           case "$VERSION" in
             *-*) flags+=(--prerelease --latest=false) ;;
           esac
+          bundle="$RUNNER_TEMP/bundle/mcp-patchbay-$VERSION.mcpb"
+          if [ ! -s "$bundle" ]; then
+            echo "::error::the bundle artifact has no mcp-patchbay-$VERSION.mcpb."
+            exit 1
+          fi
           if [ -s "$RUNNER_TEMP/release-notes.md" ]; then
-            gh release create "$TAG" "${flags[@]}" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release create "$TAG" "${flags[@]}" --notes-file "$RUNNER_TEMP/release-notes.md" "$bundle"
           else
-            gh release create "$TAG" "${flags[@]}" --generate-notes
+            gh release create "$TAG" "${flags[@]}" --generate-notes "$bundle"
           fi

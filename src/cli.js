@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // mcp-patchbay command line. With no subcommand it serves MCP over stdio.
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ConfigError, EX_CONFIG, loadConfig, resolveConfigPath } from './config.js';
+import { ConfigError, EX_CONFIG, ensureStarterConfig, loadConfig, resolveConfigPath } from './config.js';
 import { createLogger } from './log.js';
 import { PidFiles, pidDirFor } from './process.js';
 import { redact } from './redact.js';
@@ -70,9 +70,20 @@ async function serve(argv) {
     process.stderr.write(`mcp-patchbay: unknown option --${unknown[0]}\n\n${USAGE}`);
     process.exit(64);
   }
+  if (flags.config === '') {
+    process.stderr.write(`mcp-patchbay: --config needs a path\n\n${USAGE}`);
+    process.exit(64);
+  }
   const configPath = resolveConfigPath({ flag: /** @type {string | undefined} */ (flags.config) });
   let config;
   try {
+    if (ensureStarterConfig(configPath)) {
+      log.info(
+        `created a starter config with no servers at ${configPath}. ` +
+        `Add your connectors to it as the README's Quick start shows ` +
+        `(https://github.com/distronode-corporation/mcp-patchbay#quick-start), then reconnect.`,
+      );
+    }
     config = loadConfig(configPath);
   } catch (e) {
     if (e instanceof ConfigError) {
