@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.1 - 2026-11-16
+
+### Added
+
+- Zero-config first run. When the default config, `~/.config/mcp-patchbay/servers.json`, does
+  not exist, the patchbay creates it with no servers (`{"version": 1, "servers": {}}`, the
+  directory at mode 700 and the file at mode 600), logs one stderr line saying where and how to
+  add servers, and serves its own tools. Before, it exited 78. An existing group- or
+  world-writable directory is still refused before anything is written, and a missing
+  `--config` or `$MCP_PATCHBAY_CONFIG` file anywhere else is still an error (exit 78).
+- MCP Registry listing as `io.github.distronode-corporation/mcp-patchbay`: `server.json`, the
+  `mcpName` field in `package.json`, and a release step that publishes it with
+  `mcp-publisher` through GitHub OIDC once the npm version is out.
+- A Claude Desktop extension bundle, `mcp-patchbay-<version>.mcpb`, built and validated with
+  the MCPB CLI, smoke-tested on macOS, Windows and Linux, and attached to each GitHub release.
+- PRIVACY.md and a Privacy Policy section in the README: the patchbay collects and sends
+  nothing.
+
+### Documentation
+
+- README Quick start: `claude mcp add` comes first and works on its own; adding connectors is
+  the next step.
+
 ## 0.1.0 - 2026-11-14
 
 ### Added

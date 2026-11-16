@@ -32,19 +32,28 @@ patchbay fails closed.
 Contents: [Quick start](#quick-start) · [Config reference](#config-reference) ·
 [Naming contract](#naming-contract) · [Moving from Claude Code: `import` and
 `rename-permissions`](#moving-from-claude-code) · [Policy and safety model](#policy-and-safety-model) ·
-[Known limits](#known-limits) · [Comparison](#comparison) · [Uninstall and rollback](#uninstall-and-rollback)
+[Known limits](#known-limits) · [Comparison](#comparison) · [Uninstall and rollback](#uninstall-and-rollback) ·
+[Privacy Policy](#privacy-policy)
 
 ## Quick start
 
-This example hosts the public filesystem server
-([`@modelcontextprotocol/server-filesystem@2.2.0`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)).
-
-1. Write a config file and make it private. The patchbay refuses to start if the file, or the
-   directory it is in, is group- or world-writable.
+1. Register the patchbay with Claude Code under the name **`patchbay`**. The naming contract and
+   the 128-character rule assume that name.
 
    ```sh
-   mkdir -p -m 700 ~/.config/mcp-patchbay
-   cat > ~/.config/mcp-patchbay/servers.json <<'EOF'
+   claude mcp add --scope user patchbay -- npx -y mcp-patchbay@0.1.1
+   ```
+
+   That is all the first run needs. When `~/.config/mcp-patchbay/servers.json` does not exist,
+   the patchbay creates it with no servers (`{"version": 1, "servers": {}}`; the directory at
+   mode 700, the file at mode 600), says so in one line on stderr, and serves its own tools.
+   Nothing is switched on and the file holds no secrets.
+
+2. Then add your connectors. This example hosts the public filesystem server
+   ([`@modelcontextprotocol/server-filesystem@2.2.0`](https://www.npmjs.com/package/@modelcontextprotocol/server-filesystem)).
+   Edit `~/.config/mcp-patchbay/servers.json` so it reads:
+
+   ```json
    {
      "version": 1,
      "servers": {
@@ -56,29 +65,39 @@ This example hosts the public filesystem server
        }
      }
    }
-   EOF
-   chmod 600 ~/.config/mcp-patchbay/servers.json
    ```
 
-2. Check it. `doctor` validates the file and briefly starts every `allow` server. Add `--all` to
+   Keep the file private. The patchbay refuses to start if the file, or the directory it is in,
+   is group- or world-writable (`chmod 600 ~/.config/mcp-patchbay/servers.json` fixes the file).
+   Already have servers in Claude Code? [`import`](#import) writes this file from them.
+
+3. Check it. `doctor` validates the file and briefly starts every `allow` server. Add `--all` to
    also start `confirm` servers like this one.
 
    ```sh
-   npx -y mcp-patchbay@0.1.0 doctor --all
+   npx -y mcp-patchbay@0.1.1 doctor --all
    ```
 
-3. Register the patchbay with Claude Code under the name **`patchbay`**. The naming contract and
-   the 128-character rule assume that name.
-
-   ```sh
-   claude mcp add --scope user patchbay -- npx -y mcp-patchbay@0.1.0
-   ```
-
-4. In a session, ask the agent to "enable example-files". Claude Code shows the prompt
+4. The config is read once, at startup, so reconnect the patchbay (`/mcp`, then `patchbay`). In
+   a session, ask the agent to "enable example-files". Claude Code shows the prompt
    *"Allow the agent to turn on example-files (Read and write files in /path/to/project)?"*.
    Once you approve, tools such as `mcp__patchbay__example-files__read_text_file` are available.
 
 A longer, synthetic example is in [`examples/servers.json`](examples/servers.json).
+
+`--config <path>` and `$MCP_PATCHBAY_CONFIG` stay strict: only the default path is ever created
+for you, and a missing file anywhere else exits with code 78.
+
+### Claude Desktop
+
+Each [release](https://github.com/distronode-corporation/mcp-patchbay/releases) carries
+`mcp-patchbay-<version>.mcpb`, a desktop extension bundle with its dependencies included.
+Double-click it, or use **Settings > Extensions > Advanced settings > Install Extension...** in
+Claude Desktop. Its one setting is the config file, `~/.config/mcp-patchbay/servers.json` by
+default, which the first run creates as above. Then add your connectors to it and turn the
+extension off and on again in **Settings > Extensions** so it rereads the file. If a `confirm`
+server cannot be enabled because the client shows no approval form, set
+[`"confirmVia": "host"`](#confirmvia-elicitation-or-host).
 
 ## Config reference
 
@@ -358,6 +377,14 @@ extra process, when a fixed set per subagent is enough.
    `rm -rf ~/.config/mcp-patchbay` (this includes `oauth/` with mcp-remote tokens) and
    `${XDG_RUNTIME_DIR:-/tmp}/mcp-patchbay-$(id -u)` (pidfiles).
 5. If you installed it globally: `npm uninstall -g mcp-patchbay`.
+
+## Privacy Policy
+
+mcp-patchbay collects no data and sends nothing to Distronode or anyone else: no telemetry, no
+analytics, no update check. It stores only your config, sign-in tokens for remote servers you
+configure (under `~/.config/mcp-patchbay/oauth`) and pidfiles, all on your computer, until you
+delete them. The servers you configure are separate programs with their own privacy policies.
+The full policy, with the contact, is [PRIVACY.md](PRIVACY.md).
 
 ## Development
 

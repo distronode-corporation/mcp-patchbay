@@ -105,6 +105,17 @@ brief.
 - **(review fix) Sticky world-writable directories (`/tmp`) are refused too.** The sticky bit
   stops others from replacing a file you own, but not from creating the path first, or a
   symlink, before you do. A config has no reason to live there.
+- **(0.1.1) Zero-config first run.** A missing config at the default path is created as
+  `{"version": 1, "servers": {}}` (directory 0700, file 0600) and the patchbay serves with zero
+  servers, so `claude mcp add ... -- npx -y mcp-patchbay@<version>` works on the first try and
+  the Claude Desktop bundle installs without a setup step. The starter enables nothing and holds
+  no secret, so creating it grants nothing. The trigger is the resolved path, not how it was
+  named: `--config ~/.config/mcp-patchbay/servers.json` behaves like no flag, because the
+  bundle's settings pass the default path explicitly. A missing file anywhere else is still
+  exit 78, since a typo in an explicit path must not turn into a silent empty patchbay. An
+  existing directory is checked (writable bits, owner) before anything is written, and the file
+  is opened with `wx`, so an entry that appeared meanwhile, or a dangling symlink, is never
+  followed or replaced.
 - **Redaction scope.** The patchbay redacts everything *it* produces about children: logs,
   errors, `servers`/`info`/`enable` output, doctor output, and child error messages it relays.
   - Tool results, tool lists and child instructions are pass-through content and are **not**

@@ -41,3 +41,108 @@ jobs:
           python-version: '3.12'
       - name: write-gate example tests
         run: python -m unittest discover -s examples/write-gate -v
+
+  # The Claude Desktop extension bundle: built from this tree with the pinned MCPB CLI
+  # (bundle/build.mjs runs `mcpb validate`, then `mcpb pack`), and kept as an artifact for the
+  # smoke test below.
+  bundle:
+    name: bundle (.mcpb)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Build and validate the bundle
+        run: node bundle/build.mjs --out "$RUNNER_TEMP/bundle"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mcpb
+          path: ${{ runner.temp }}/bundle/*.mcpb
+          if-no-files-found: error
+          retention-days: 7
+
+  # Unpacks the bundle and starts it the way its manifest says, with an empty home directory,
+  # on each platform Claude Desktop runs on (plus Linux). bundle/smoke.mjs talks to it over
+  # stdio and checks the zero-config first run: the tools, no servers, the starter config.
+  # Node 22 is the oldest the package supports.
+  bundle-smoke:
+    name: bundle smoke (${{ matrix.os }})
+    needs: bundle
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025, ubuntu-24.04]
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mcpb
+          path: ${{ runner.temp }}/bundle
+      # An .mcpb is a zip archive. Python's zipfile unpacks it the same way on every runner.
+      - name: Unpack the bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          python -m zipfile -e "$RUNNER_TEMP/bundle/mcp-patchbay-$version.mcpb" "$RUNNER_TEMP/unpacked"
+      - name: Start it as the manifest says
+        shell: bash
+        run: node bundle/smoke.mjs "$RUNNER_TEMP/unpacked"
+
+  # server.json, checked by the MCP Registry's own publisher CLI (schema and semantic rules).
+  # The binary is the upstream release checked against a pinned SHA-256, as in audit.yml. A
+  # version bump changes both lines, here and in release.yml; take the digest from the
+  # release's registry_<version>_checksums.txt and pick a release at least 14 days old.
+  server-json:
+    name: server.json
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      MCP_PUBLISHER_VERSION: 1.8.7
+      MCP_PUBLISHER_SHA256: 00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579
+    steps:
+      - uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" mcp-publisher
+          "$RUNNER_TEMP/mcp-publisher" --version
+      - name: mcp-publisher validate
+        run: '"$RUNNER_TEMP/mcp-publisher" validate server.json'

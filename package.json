@@ -1,6 +1,7 @@
 {
   "name": "mcp-patchbay",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "mcpName": "io.github.distronode-corporation/mcp-patchbay",
   "description": "An MCP server that hosts other MCP servers as child processes and lets the agent switch them on and off mid-session, with a person confirming risky ones.",
   "keywords": [
     "mcp",
@@ -30,6 +31,7 @@
     "README.md",
     "SECURITY-MODEL.md",
     "SECURITY.md",
+    "PRIVACY.md",
     "CHANGELOG.md",
     "LICENSE",
     "NOTICE",
@@ -45,5 +47,9 @@
     "@modelcontextprotocol/sdk": "1.32.2",
     "mcp-remote": "0.15.2",
     "zod": "4.6.7"
+  },
+  "homepage": "https://github.com/distronode-corporation/mcp-patchbay#readme",
+  "bugs": {
+    "url": "https://github.com/distronode-corporation/mcp-patchbay/issues"
   }
 }

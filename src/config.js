@@ -36,6 +36,62 @@ export function defaultConfigPath(home = os.homedir()) {
   return path.join(home, '.config', 'mcp-patchbay', 'servers.json');
 }
 
+/** The config the first run writes at the default path: version 1, no servers, no secrets. */
+export const STARTER_CONFIG = '{\n  "version": 1,\n  "servers": {}\n}\n';
+
+/** @param {string} p */
+const samePath = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+
+/**
+ * Creates the starter config when `file` is the default config path and nothing is there yet:
+ * the directory at 0700 and the file at 0600 (DECISIONS.md, "Zero-config first run"). Any other
+ * path is left alone, so a missing `--config` or `$MCP_PATCHBAY_CONFIG` file stays an error in
+ * loadConfig. An existing directory must pass checkDirPermissions before anything is written,
+ * and an existing entry (a file, or a dangling symlink) is never replaced or followed.
+ * @param {string} file
+ * @param {string} [home]
+ * @returns {boolean} true if this call created the file
+ */
+export function ensureStarterConfig(file, home = os.homedir()) {
+  const def = defaultConfigPath(home);
+  if (samePath(file) !== samePath(def)) return false;
+  try {
+    fs.lstatSync(def);
+    return false;
+  } catch (e) {
+    if (/** @type {any} */ (e).code !== 'ENOENT') return false; // loadConfig reports it
+  }
+  const dir = path.dirname(def);
+  const posix = process.platform !== 'win32';
+  try {
+    const made = fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    if (posix && made !== undefined) fs.chmodSync(dir, 0o700);
+  } catch (e) {
+    throw new ConfigError(`cannot create the config directory ${dir}: ${/** @type {any} */ (e).code ?? e}`);
+  }
+  if (posix) checkDirPermissions(def, dir);
+  let fd;
+  try {
+    // 'wx': never replaces or follows anything that appeared since the check above.
+    fd = fs.openSync(def, 'wx', 0o600);
+  } catch (e) {
+    if (/** @type {any} */ (e).code === 'EEXIST') return false;
+    throw new ConfigError(`cannot create config ${def}: ${/** @type {any} */ (e).code ?? e}`);
+  }
+  try {
+    if (posix) fs.fchmodSync(fd, 0o600);
+    fs.writeSync(fd, STARTER_CONFIG);
+    fs.fsyncSync(fd);
+  } catch (e) {
+    // Never leave a half-written file that the next start would report as invalid JSON.
+    fs.closeSync(fd);
+    try { fs.rmSync(def, { force: true }); } catch { /* best effort */ }
+    throw new ConfigError(`cannot write config ${def}: ${/** @type {any} */ (e).code ?? e}`);
+  }
+  fs.closeSync(fd);
+  return true;
+}
+
 /**
  * @param {{flag?: string, env?: NodeJS.ProcessEnv}} o
  */

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.distronode-corporation/mcp-patchbay",
+  "title": "mcp-patchbay",
+  "description": "Hosts your MCP servers and switches them on and off mid-session, with a person approving risky ones",
+  "version": "0.1.1",
+  "websiteUrl": "https://github.com/distronode-corporation/mcp-patchbay#readme",
+  "repository": {
+    "url": "https://github.com/distronode-corporation/mcp-patchbay",
+    "source": "github",
+    "id": "1450813288"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "mcp-patchbay",
+      "version": "0.1.1",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
