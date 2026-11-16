@@ -66,6 +66,13 @@ test("the README's pinned commands use this version", () => {
   for (const v of pins) assert.equal(v, pkg.version);
 });
 
+test('glama.json names its schema and the GitHub maintainers of the Glama listing', () => {
+  const glama = json('glama.json');
+  assert.deepEqual(Object.keys(glama), ['$schema', 'maintainers']);
+  assert.equal(glama.$schema, 'https://glama.ai/mcp/schemas/server.json');
+  assert.deepEqual(glama.maintainers, ['distronode-com']);
+});
+
 test('the Claude Code plugin pins this version of the npm package', () => {
   const plugin = json('plugins/claude-code/.claude-plugin/plugin.json');
   const mcp = json('plugins/claude-code/.mcp.json');

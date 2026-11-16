@@ -12,6 +12,8 @@ All notable changes to this project are documented here. The format follows
   `npx -y mcp-patchbay@<version>`, with the directory listing fields (icon, documentation,
   support and privacy policy URLs). Its README explains the plugin tool prefix
   `mcp__plugin_patchbay_patchbay__` and what in 0.1.1 still assumes `mcp__patchbay__`.
+- `glama.json`, which names the GitHub account that maintains the server's listing in the
+  Glama MCP directory.
 
 ## 0.1.1 - 2026-11-16
 
