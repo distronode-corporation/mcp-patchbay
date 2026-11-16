@@ -18,6 +18,12 @@ const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'ut
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'patchbay-smoke-'));
 const TIMEOUT_MS = 60_000;
 
+// Declared before anything can call fail(), which reads all three.
+let done = false;
+let stderr = '';
+/** @type {import('node:child_process').ChildProcess | undefined} */
+let child;
+
 const sub = (s, vars) => s.replace(/\$\{([^}]+)\}/g, (m, k) => (k in vars ? vars[k] : m));
 const vars = { __dirname: dir, HOME: home, '/': path.sep, pathSeparator: path.sep };
 for (const [key, opt] of Object.entries(manifest.user_config ?? {})) {
@@ -35,13 +41,11 @@ const env = { ...process.env, ...(cfg.env ?? {}), HOME: home, USERPROFILE: home,
 delete env.MCP_PATCHBAY_CONFIG;
 
 process.stdout.write(`starting: ${path.basename(command)} ${args.join(' ')}\n`);
-const child = spawn(command, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
-let stderr = '';
+child = spawn(command, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
 child.stderr.on('data', (d) => { stderr += d; });
 child.on('exit', (code, sig) => { if (!done) fail(`the server exited early (${code ?? sig})`); });
 const timer = setTimeout(() => fail(`no answer in ${TIMEOUT_MS / 1000} s`), TIMEOUT_MS);
 
-let done = false;
 let buf = '';
 const waiting = new Map();
 child.stdout.on('data', (d) => {
@@ -70,6 +74,7 @@ function fail(why) {
   done = true;
   process.stderr.write(`smoke: FAILED: ${why}\n--- server stderr ---\n${stderr}\n`);
   child?.kill();
+  fs.rmSync(home, { recursive: true, force: true });
   process.exit(1);
 }
 
