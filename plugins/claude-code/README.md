@@ -25,9 +25,17 @@ shows, with `cmd /c npx -y mcp-patchbay@0.1.1` as the command.
 
 ## Install
 
-Once the plugin is listed in Anthropic's plugin directory, install it from there. A marketplace
-entry in this repository, pinned to a release tag and its commit, follows the plugin's first
-release. Start a new session after installing.
+At the Claude Code prompt:
+
+```
+/plugin marketplace add distronode-corporation/mcp-patchbay
+/plugin install patchbay@mcp-patchbay
+```
+
+The repository's marketplace entry pins the plugin to a reviewed commit, so a later push to the
+main branch does not change what you install until the entry is updated. Once the plugin is
+listed in Anthropic's plugin directory, you can install it from there instead. Start a new
+session after installing.
 
 ## First run and configuration
 
