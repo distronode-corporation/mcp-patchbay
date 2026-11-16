@@ -1,0 +1,19 @@
+{
+  "name": "patchbay",
+  "displayName": "mcp-patchbay",
+  "version": "0.1.1",
+  "description": "Hosts your MCP servers and lets Claude switch them on and off mid-session, with a person approving risky ones.",
+  "author": {
+    "name": "Distronode Corporation",
+    "email": "opensource@distronode.com",
+    "url": "https://github.com/distronode-corporation"
+  },
+  "homepage": "https://github.com/distronode-corporation/mcp-patchbay#readme",
+  "repository": "https://github.com/distronode-corporation/mcp-patchbay",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "proxy", "tools", "connectors", "elicitation"],
+  "icon": "./icon.png",
+  "documentationUrl": "https://github.com/distronode-corporation/mcp-patchbay/blob/main/plugins/claude-code/README.md",
+  "supportUrl": "https://github.com/distronode-corporation/mcp-patchbay/issues",
+  "privacyPolicyUrl": "https://github.com/distronode-corporation/mcp-patchbay/blob/main/PRIVACY.md"
+}

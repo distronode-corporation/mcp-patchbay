@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- A Claude Code plugin, `patchbay`, in `plugins/claude-code`: one MCP server that runs
+  `npx -y mcp-patchbay@<version>`, with the directory listing fields (icon, documentation,
+  support and privacy policy URLs). Its README explains the plugin tool prefix
+  `mcp__plugin_patchbay_patchbay__` and what in 0.1.1 still assumes `mcp__patchbay__`.
+
 ## 0.1.1 - 2026-11-16
 
 ### Added

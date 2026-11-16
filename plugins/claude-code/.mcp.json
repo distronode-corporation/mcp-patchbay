@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "patchbay": {
+      "command": "npx",
+      "args": ["-y", "mcp-patchbay@0.1.1"]
+    }
+  }
+}
