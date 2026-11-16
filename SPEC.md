@@ -54,8 +54,9 @@ MCP client (e.g. Claude Code)  ⇄ stdio ⇄  mcp-patchbay  ⇄ stdio ⇄  child
    in item 3 before anything is written; an existing entry, even a dangling symlink, is never
    replaced or followed. Any other `--config` or `$MCP_PATCHBAY_CONFIG` path that is missing is
    still an error (78). `doctor` and `rename-permissions` never create it, and `import` writes
-   it only as its own output, never as a starter. A leading `~` or `${HOME}` in `--config` or
-   `$MCP_PATCHBAY_CONFIG` is expanded first; `--config=` with no path exits 64.
+   it only as its own output, never as a starter. When serving, a leading `~` or `${HOME}` in
+   `--config` or `$MCP_PATCHBAY_CONFIG` is expanded first (`doctor` resolves the path the same
+   way), and `--config=` with no path exits 64. The other subcommands parse `--config` as before.
    **[review fix]** For invalid JSON the message is only `config <file> is not valid JSON (line L,
    column C)`. The parser's own message is never shown, because Node quotes the text around the
    error (`Unexpected token 'g', ..."B_TOKEN": ghp_abc"...`), and that text may be a secret. The
