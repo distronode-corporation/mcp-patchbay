@@ -90,6 +90,14 @@ A longer, synthetic example is in [`examples/servers.json`](examples/servers.jso
 `--config <path>` and `$MCP_PATCHBAY_CONFIG` stay strict: only the default path is ever created
 for you, and a missing file anywhere else exits with code 78.
 
+### Claude Code plugin
+
+[`plugins/claude-code`](plugins/claude-code) is a Claude Code plugin, `patchbay`, whose MCP
+server runs `npx -y mcp-patchbay@0.1.1`. Its tools are named
+`mcp__plugin_patchbay_patchbay__<tool>`, not `mcp__patchbay__<tool>`, so the naming contract,
+the 128-character rule, `doctor` and `rename-permissions` below assume the hand-registered
+server instead. Its [README](plugins/claude-code/README.md) has the details.
+
 ### Claude Desktop
 
 Each [release](https://github.com/distronode-corporation/mcp-patchbay/releases) carries
