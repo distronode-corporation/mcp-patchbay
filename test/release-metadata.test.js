@@ -77,6 +77,8 @@ test('the Claude Code plugin pins this version of the npm package', () => {
   assert.deepEqual(mcp.mcpServers.patchbay.args, ['-y', `${pkg.name}@${pkg.version}`]);
   for (const k of ['documentationUrl', 'supportUrl', 'privacyPolicyUrl']) assert.match(plugin[k], /^https:\/\//, k);
   const icon = fs.readFileSync(path.join(ROOT, 'plugins', 'claude-code', plugin.icon));
+  assert.equal(icon.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(icon.subarray(12, 16).toString('ascii'), 'IHDR');
   assert.deepEqual([icon.readUInt32BE(16), icon.readUInt32BE(20)], [512, 512]);
   assert.match(read('plugins/claude-code/README.md'), new RegExp(`mcp-patchbay@${pkg.version.replaceAll('.', '\\.')}\\b`));
 });

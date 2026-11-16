@@ -96,7 +96,9 @@ for you, and a missing file anywhere else exits with code 78.
 server runs `npx -y mcp-patchbay@0.1.1`. Its tools are named
 `mcp__plugin_patchbay_patchbay__<tool>`, not `mcp__patchbay__<tool>`, so the naming contract,
 the 128-character rule, `doctor` and `rename-permissions` below assume the hand-registered
-server instead. Its [README](plugins/claude-code/README.md) has the details.
+server instead. The warning at the top applies with the plugin prefix too: never allow
+`mcp__plugin_patchbay_patchbay__enable_confirm` or the whole plugin server, and `doctor` does
+not check rules written with that prefix. Its [README](plugins/claude-code/README.md) has the details.
 
 ### Claude Desktop
 
