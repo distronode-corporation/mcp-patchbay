@@ -10,7 +10,8 @@ name: Release
 #            publishing (OIDC, no token), a prerelease version under the `next` dist-tag;
 #   registry publishes server.json to the MCP Registry once that npm version is out, signed
 #            in with GitHub OIDC (no token);
-#   release  creates the GitHub Release for the tag, with the bundle attached.
+#   release  attests the bundle (build provenance) and creates the GitHub Release for the tag,
+#            with the bundle attached.
 #
 # The npm job is OFF until the repository variable NPM_PUBLISH is 'true', which is set
 # only once the `mcp-patchbay` package on npm has a trusted publisher naming this
@@ -293,6 +294,8 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write # creating the release
+      id-token: write # the OIDC token Sigstore signs the bundle's provenance attestation with
+      attestations: write # storing that attestation, for `gh attestation verify`
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
@@ -310,6 +313,13 @@ jobs:
         with:
           name: mcpb
           path: ${{ runner.temp }}/bundle
+
+      # A build provenance attestation on the bundle, signed through Sigstore with this job's
+      # OIDC identity. The README says how to check it with `gh attestation verify`.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/bundle/mcp-patchbay-${{ needs.guard.outputs.version }}.mcpb
 
       - name: Extract release notes from CHANGELOG
         run: |

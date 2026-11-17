@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- The release workflow attests the Claude Desktop bundle (`.mcpb`) with a build provenance
+  attestation; the README's "Verify a release" says how to check it with `gh attestation verify`.
+
 - A Claude Code plugin, `patchbay`, in `plugins/claude-code`: one MCP server that runs
   `npx -y mcp-patchbay@<version>`, with the directory listing fields (icon, documentation,
   support and privacy policy URLs). Its README explains the plugin tool prefix

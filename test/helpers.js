@@ -45,7 +45,7 @@ export function fake(o = {}) {
     policy: o.policy ?? 'allow',
     command: process.execPath,
     args: [FAKE],
-    env: { FAKE_TOOLS: o.tools ?? 'echo', ...(o.name ? { FAKE_NAME: o.name } : {}), ...(o.env ?? {}) },
+    env: { FAKE_TOOLS: o.tools ?? 'echo', ...(o.name ? { FAKE_NAME: o.name } : {}), ...o.env },
   };
   if (o.prefix) entry.prefix = o.prefix;
   if (o.timeoutMs !== undefined) entry.timeoutMs = o.timeoutMs;
@@ -114,7 +114,7 @@ export async function startPatchbay(o) {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [CLI, '--config', cfg, ...(o.extraArgs ?? [])],
-    env: { ...process.env, XDG_RUNTIME_DIR: runtime, ...(o.env ?? {}) },
+    env: { ...process.env, XDG_RUNTIME_DIR: runtime, ...o.env },
     stderr: 'pipe',
     cwd: o.cwd ?? ROOT,
   });

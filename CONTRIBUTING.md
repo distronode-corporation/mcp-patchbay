@@ -19,7 +19,9 @@ Thank you for helping. Some ground rules keep the patchbay small and trustworthy
 
 ```sh
 npm ci
+npm run lint
 npm test
+npm run test:coverage   # what CI runs on Linux: the suite with its coverage floors
 python3 -m unittest discover -s examples/write-gate -v
 ```
 
@@ -27,6 +29,23 @@ The tests use `node:test` and spawn real processes: the patchbay itself, a fake 
 `test/fixtures/fake-server.js`, and the real mcp-remote against a local HTTP server. They take
 about 40 seconds.
 
+## Style
+
+Code follows oxlint's `correctness` rules (oxlint's own rules and its ports of the ESLint and
+unicorn rules, for code that is outright wrong), configured in `.oxlintrc.json`, plus the
+principles above. Formatting follows `.editorconfig`. CI runs `npm run lint` (warnings fail it
+too) in every test job, and a pull request that fails it does not merge. A rule is never switched
+off for one line to make a change pass; fix the code, or argue for changing the config in the
+pull request.
+
+## Tests
+
+- A pull request that adds or changes functionality adds tests for it to the automated suite, and
+  a bug fix adds a test that fails without the fix.
+- On Linux, CI runs `npm run test:coverage`, which fails below the floors in `package.json`
+  (lines 94%, branches 82%, functions 86% of `src/`). The floors only go up: never lower one or
+  exclude a file to get a change through.
+- The tests run with `--throw-deprecation`, so a call to a deprecated Node.js API fails them.
 - Tests that rely on POSIX process groups or signals are skipped on Windows, with a reason.
 - A flaky test is a bug. Fix the cause. Do not add retries or loosen assertions.
 
@@ -38,7 +57,18 @@ about 40 seconds.
 - Security issues go through private vulnerability reporting (see `SECURITY.md`), not public
   issues.
 
-By contributing, you agree that your contributions are licensed under the Apache License 2.0.
+## Commits and pull requests
+
+There is no Developer Certificate of Origin sign-off requirement. By opening a pull
+request you agree that your contribution is licensed under the Apache License, Version
+2.0, as section 5 of that licence describes.
+
+Documentation moves with the code: a pull request that changes behaviour changes the README,
+`SPEC.md` or `SECURITY-MODEL.md` that describes it in the same pull request. A known mismatch
+between the docs and the code is a bug; open an issue for it.
+
+The project's roles, and how a change is accepted, are in the organization's
+[GOVERNANCE.md](https://github.com/distronode-corporation/.github/blob/main/GOVERNANCE.md).
 
 ## Code of conduct
 
