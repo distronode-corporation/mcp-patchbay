@@ -1,6 +1,7 @@
 # mcp-patchbay
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16485/badge)](https://www.bestpractices.dev/projects/16485)
+[Listed on mcpservers.org](https://mcpservers.org/servers/distronode-corporation/mcp-patchbay)
 
 > **If you allow `mcp__patchbay` as a whole in your client's permissions, you approve every tool of every server it hosts.**
 > Allow individual tools (`mcp__patchbay__<server>__<tool>`) instead. See [Policy and safety model](#policy-and-safety-model).
@@ -390,6 +391,41 @@ extra process, when a fixed set per subagent is enough.
    `${XDG_RUNTIME_DIR:-/tmp}/mcp-patchbay-$(id -u)` (pidfiles).
 5. If you installed it globally: `npm uninstall -g mcp-patchbay`.
 
+## Verify a release
+
+Every release is built from a `v*` tag on `main` by `.github/workflows/release.yml`. The npm
+package is published with npm trusted publishing: no npm token exists, and npm attaches a
+Sigstore provenance attestation naming this repository, that workflow and the commit. To check
+the copy you installed, in the project or directory where you installed it:
+
+```sh
+npm audit signatures
+```
+
+It should report `verified registry signatures` (the registry's keys are at
+<https://registry.npmjs.org/-/npm/v1/keys>) and `verified attestations` for mcp-patchbay. The
+attestation is also on the package's npm page, under Provenance.
+
+The npm package is reproducible: it has no build step, and packing the tagged commit gives the
+same tarball, byte for byte, as the one on npm.
+
+```sh
+git clone https://github.com/distronode-corporation/mcp-patchbay.git
+cd mcp-patchbay && git checkout v0.1.1
+npm pack --ignore-scripts
+npm view mcp-patchbay@0.1.1 dist.shasum   # equals: sha1sum mcp-patchbay-0.1.1.tgz
+```
+
+The Claude Desktop bundle (`.mcpb`) of releases after 0.1.1 carries a build provenance
+attestation, signed through Sigstore by the release workflow. Check a downloaded bundle with:
+
+```sh
+gh attestation verify mcp-patchbay-<version>.mcpb --repo distronode-corporation/mcp-patchbay \
+  --signer-workflow distronode-corporation/mcp-patchbay/.github/workflows/release.yml
+```
+
+The bundle attached to 0.1.1 has no attestation; install 0.1.1 from npm if you need one you can check.
+
 ## Privacy Policy
 
 mcp-patchbay collects no data and sends nothing to Distronode or anyone else: no telemetry, no
@@ -402,7 +438,9 @@ The full policy, with the contact, is [PRIVACY.md](PRIVACY.md).
 
 ```sh
 npm ci
-npm test                                    # node:test, about 20 s
+npm run lint                                # oxlint
+npm test                                    # node:test, about 30 s
+npm run test:coverage                       # the same, with the coverage floors CI enforces
 python3 -m unittest discover -s examples/write-gate -v
 ```
 

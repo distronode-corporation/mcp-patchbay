@@ -37,7 +37,7 @@ if (leftover) fail(`an argument was not substituted: ${leftover}`);
 
 const runtime = path.join(home, 'runtime');
 fs.mkdirSync(runtime, { mode: 0o700 });
-const env = { ...process.env, ...(cfg.env ?? {}), HOME: home, USERPROFILE: home, XDG_RUNTIME_DIR: runtime };
+const env = { ...process.env, ...cfg.env, HOME: home, USERPROFILE: home, XDG_RUNTIME_DIR: runtime };
 delete env.MCP_PATCHBAY_CONFIG;
 
 process.stdout.write(`starting: ${path.basename(command)} ${args.join(' ')}\n`);

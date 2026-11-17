@@ -34,8 +34,38 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
-      - run: npm test
+      # oxlint's correctness rules (.oxlintrc.json), warnings included. In every test job, so it
+      # is part of the required checks.
+      - run: npm run lint
+      # Linux measures coverage and fails below the floors in package.json's test:coverage
+      # (lines 94, branches 82, functions 86: what the suite reaches today, rounded down).
+      # Other systems take other platform branches (no Linux start times on macOS, taskkill
+      # and skipped signal tests on Windows), so they run the same suite unmeasured.
+      - if: matrix.os == 'ubuntu-24.04'
+        run: npm run test:coverage
+      - if: matrix.os != 'ubuntu-24.04'
+        run: npm test
       - run: npm pack --dry-run
+      # The npm package is reproducible: there is no build step, and two packs of this commit
+      # give the same tarball, byte for byte. The README says how to compare a release with
+      # the tarball on npm. (The .mcpb bundle is not reproducible yet: its zip entries carry
+      # the build's file times.)
+      - name: Reproducible package
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pack-1" "$RUNNER_TEMP/pack-2"
+          npm pack --silent --ignore-scripts --pack-destination "$RUNNER_TEMP/pack-1" > /dev/null
+          npm pack --silent --ignore-scripts --pack-destination "$RUNNER_TEMP/pack-2" > /dev/null
+          one="$(sha256sum "$RUNNER_TEMP"/pack-1/*.tgz | cut -d' ' -f1)"
+          two="$(sha256sum "$RUNNER_TEMP"/pack-2/*.tgz | cut -d' ' -f1)"
+          echo "first pack  $one"
+          echo "second pack $two"
+          if [ "$one" != "$two" ]; then
+            echo "::error::two packs of the same commit differ."
+            exit 1
+          fi
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'

@@ -41,11 +41,16 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test --test-reporter=spec \"test/**/*.test.js\""
+    "lint": "oxlint --deny-warnings",
+    "test": "node --test --throw-deprecation --test-reporter=spec \"test/**/*.test.js\"",
+    "test:coverage": "node --test --throw-deprecation --test-reporter=spec --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=94 --test-coverage-branches=82 --test-coverage-functions=86 \"test/**/*.test.js\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
     "mcp-remote": "0.15.2",
     "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "oxlint": "1.90.0"
   }
 }

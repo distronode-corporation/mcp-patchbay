@@ -11,6 +11,21 @@ protects, what it trusts, and where its guarantees stop. For the protocol detail
   `oauth.configDir`, and in whatever the servers themselves can reach.
 - **Your consent.** The meaning of "a person approved this".
 
+## Threat model
+
+Who can do what, and which part of the patchbay stands in their way:
+
+| Actor | What they can do | What stops them |
+|---|---|---|
+| The agent, wrong or prompt-injected | Call the patchbay's tools with any arguments, as often as it likes, and ask the person to approve things. | It can only name configured servers: no tool adds a server, changes a command or runs anything else. `deny` is final, and `confirm` needs a person (below). |
+| A hosted server (a child) | Return any tool result, tool description or instructions; send requests to the client; print anything on stderr; crash or hang. | Its requests are attributed (`[<server>]`) and sampling is refused; its stderr is redacted before the patchbay repeats it; a crash marks only that server `failed`; startup has timeouts, and calls can be capped with `timeoutMs`. What its own code does with your privileges is out of scope (see Known gaps). |
+| A remote endpoint behind mcp-remote | Drive mcp-remote's sign-in flow and choose its sign-in URL. | Only mcp-remote, and only while it starts, can raise a sign-in prompt, and the prompt is labelled with the server's name. |
+| Another local user | Read the process list, write to shared directories such as `/tmp`. | Header values stay out of argv; the config and its directory are refused when others can write them (POSIX); pidfiles live in a 0700 directory the patchbay owns, and leftovers are killed only when pid, command line hash, process group and (Linux) start time all match. |
+
+Out of scope: a person who approves a server they should not, permission rules that approve
+`enable_confirm` without asking (`doctor` warns about them), and an attacker who can already
+write your config or run code as you.
+
 ## Trust boundaries
 
 | Party | Trusted? | Why |
@@ -219,6 +234,44 @@ child deliberately leaking data.
   limits *which* servers run, not *what they do*.
 - Configuration mistakes are yours. A `policy: allow` server that can write files can be enabled
   by the agent without asking.
+
+## Secure design principles applied
+
+- **Least privilege.** The agent gets five small tools (six with `confirmVia: "host"`) and no
+  generic call or exec tool (`server.js`; `test/enable.test.js`). A child gets the patchbay's
+  environment plus its own entry's `env`, never another entry's (`test/isolation.test.js`).
+  Files the patchbay writes are private: the starter config at 0600, its pidfile and OAuth
+  directories at 0700.
+- **Fail closed.** Only an explicit accept with `allow: true` turns on a `confirm` server;
+  decline, cancel, a malformed answer, a timeout or a client without elicitation all mean no
+  (`test/enable.test.js`). A config that others can write, has an unknown key, or names an
+  unknown server is refused at startup (`config.js`; `test/config.test.js`).
+- **Complete mediation.** Every path that can start a server, `enable`, `restart` and
+  `enable_confirm`, goes through the same policy check, and concurrent enables share one pending
+  question (`test/host-confirm.test.js`; an enable racing a restart joins it, `test/restart-race.test.js`).
+- **Economy of mechanism.** Plain JavaScript, no build step, three runtime dependencies pinned
+  exactly, a config read once and never written by the server ([DECISIONS.md](DECISIONS.md)).
+- **Separation of trust.** The decision about what may run lives in the trusted config; the
+  untrusted agent can only pick a name from it.
+
+## Common weaknesses countered
+
+Mapped to the CWE Top 25 and the OWASP Top 10. Each line names the mechanism and the tests that pin it.
+
+| Weakness | How it is countered | Tests |
+|---|---|---|
+| OS command injection (CWE-78) | Children are spawned from the config's `command` and `args` as an argument vector with `shell: false` (`children.js`); the agent never supplies a command or an argument. | `test/enable.test.js`, `test/config.test.js` |
+| Improper input validation (CWE-20) | The config is validated against a strict schema (unknown keys refused with their path); server names and prefixes follow `[A-Za-z0-9_-]`, and tool calls must name an exposed tool. | `test/config.test.js`, `test/naming.test.js`, `test/enable.test.js` |
+| Missing authorization (CWE-862) | `deny` servers cannot be started by any path; `confirm` servers need a person; `enable_confirm` refuses `allow` and `deny` servers. | `test/enable.test.js`, `test/host-confirm.test.js`, `test/doctor.test.js` |
+| Prototype pollution (CWE-1321) | Inherited object keys are not server names, and an env key named `__proto__` stays a plain key. | `test/config.test.js` |
+| Insecure permissions and link following (CWE-276, CWE-59) | The config and its directory are refused when group- or world-writable or owned by someone else, a symlink is followed only to a target that passes the same checks, and the first run does not follow a dangling symlink (POSIX). | `test/config.test.js`, `test/first-run.test.js`, `test/fsutil.test.js` |
+| Exposure of secrets (CWE-200, CWE-532, CWE-214) | Everything the patchbay emits is redacted (patterns plus the entry's own values); header values are kept out of argv; pidfiles hold a hash of the command line. | `test/redact.test.js`, `test/auth.test.js`, `test/isolation.test.js` |
+| Inefficient regular expressions (CWE-1333) | The redaction patterns are bounded, and a test pins linear time on long inputs. | `test/redact.test.js` |
+| Signalling the wrong process (CWE-283, pid reuse) | Leftovers are killed only by process group, and only when owner, command line hash, process group and (Linux) start time match. | `test/lifecycle.test.js` |
+| Resource exhaustion by a child (CWE-400) | Startup timeouts, an optional per-server call cap (`timeoutMs`, off by default), a stderr ring buffer of the last 20 lines, and no automatic restarts. | `test/proxy.test.js`, `test/redact.test.js`, `test/isolation.test.js` |
+| Confused deputy through a child (CWE-441) | Child elicitations are prefixed `[<server>]`, sign-in prompts come only from mcp-remote while it starts, and sampling is refused. | `test/proxy.test.js`, `test/auth.test.js` |
+| Path traversal (CWE-22) | The agent never supplies a path; every path comes from the trusted config or the patchbay's own directories. | |
+| Deserialization of untrusted data (CWE-502) | Only JSON is parsed (the config, Claude Code's files, MCP messages through the SDK's schemas), into plain data. | `test/config.test.js`, `test/import.test.js` |
 
 ## Reporting a vulnerability
 

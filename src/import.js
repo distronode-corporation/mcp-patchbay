@@ -68,7 +68,7 @@ export function importClaudeConfig(o) {
     throw new Error(jsonSyntaxMessage(o.from, text));
   }
   /** @type {Record<string, any>} */
-  const defs = { ...(raw.mcpServers ?? {}) };
+  const defs = { ...raw.mcpServers };
   /** @type {string[]} */
   let disabled = [];
   if (o.project) {

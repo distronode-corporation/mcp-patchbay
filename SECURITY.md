@@ -22,5 +22,8 @@ environment; if one is part of the problem, say where it appeared, not what it w
 Expect an acknowledgement within a few working days. This is a small project with no paid
 bug bounty; what you get is credit in the changelog entry for the fix, if you want it.
 
+The whole process, from report to advisory, is in the organization's
+[GOVERNANCE.md](https://github.com/distronode-corporation/.github/blob/main/GOVERNANCE.md#vulnerability-response).
+
 The threat model is described in [SECURITY-MODEL.md](SECURITY-MODEL.md): what is trusted, what
 `confirm` does and does not guarantee, and how redaction works.
