@@ -65,7 +65,7 @@ Contents: [Quick start](#quick-start) Â· [Config reference](#config-reference) Â
    the 128-character rule assume that name.
 
    ```sh
-   claude mcp add --scope user patchbay -- npx -y mcp-patchbay@0.1.1
+   claude mcp add --scope user patchbay -- npx -y mcp-patchbay@0.1.2
    ```
 
    That is all the first run needs. When `~/.config/mcp-patchbay/servers.json` does not exist,
@@ -101,7 +101,7 @@ Contents: [Quick start](#quick-start) Â· [Config reference](#config-reference) Â
    also start `confirm` servers like this one.
 
    ```sh
-   npx -y mcp-patchbay@0.1.1 doctor --all
+   npx -y mcp-patchbay@0.1.2 doctor --all
    ```
 
 4. The config is read once, at startup, so reconnect the patchbay (`/mcp`, then `patchbay`). In
@@ -117,7 +117,7 @@ for you, and a missing file anywhere else exits with code 78.
 ### Claude Code plugin
 
 [`plugins/claude-code`](plugins/claude-code) is a Claude Code plugin, `patchbay`, whose MCP
-server runs `npx -y mcp-patchbay@0.1.1`. Its tools are named
+server runs `npx -y mcp-patchbay@0.1.2`. Its tools are named
 `mcp__plugin_patchbay_patchbay__<tool>`, not `mcp__patchbay__<tool>`, so the naming contract,
 the 128-character rule, `doctor` and `rename-permissions` below assume the hand-registered
 server instead. The warning at the top applies with the plugin prefix too: never allow
@@ -435,9 +435,9 @@ same tarball, byte for byte, as the one on npm.
 
 ```sh
 git clone https://github.com/distronode-corporation/mcp-patchbay.git
-cd mcp-patchbay && git checkout v0.1.1
+cd mcp-patchbay && git checkout v0.1.2
 npm pack --ignore-scripts
-npm view mcp-patchbay@0.1.1 dist.shasum   # equals: sha1sum mcp-patchbay-0.1.1.tgz
+npm view mcp-patchbay@0.1.2 dist.shasum   # equals: sha1sum mcp-patchbay-0.1.2.tgz
 ```
 
 The Claude Desktop bundle (`.mcpb`) of releases after 0.1.1 carries a build provenance

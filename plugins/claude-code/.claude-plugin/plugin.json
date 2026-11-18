@@ -1,7 +1,7 @@
 {
   "name": "patchbay",
   "displayName": "mcp-patchbay",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Hosts your MCP servers and lets Claude switch them on and off mid-session, with a person approving risky ones.",
   "author": {
     "name": "Distronode Corporation",
