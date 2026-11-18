@@ -15,9 +15,10 @@ npx -y mcp-patchbay@0.1.1 import --from ~/.claude.json --out ~/.config/mcp-patch
 npx -y mcp-patchbay@0.1.1 doctor --all
 ```
 
-Register it as `patchbay`, copy your existing Claude Code servers into its config with
-[`import`](#import) (then remove them from Claude Code, or they run twice; or write the file by
-hand as in [Quick start](#quick-start)), and check that each one starts.
+Register it as `patchbay`, copy your user-level Claude Code servers into its config with
+[`import`](#import), and check that each one starts. `import` replaces the `--out` file (it
+backs up the old one first) and prints what it imported and skipped: remove the imported servers
+from Claude Code, or they run twice. Or write the file by hand as in [Quick start](#quick-start).
 
 ![A recorded MCP client session: five patchbay tools, a confirm prompt on enable, 16 filesystem tools appear, and disappear again on disable](docs/images/session.png)
 
@@ -278,7 +279,8 @@ mcp-patchbay import --from ~/.claude.json --project /path/to/project --out ~/.co
 - **Skips.** It skips, and reports, servers it cannot host: `claude.ai …` connectors,
   `plugin:…` servers, `claude-in-chrome`, `ws` transports, names that are invalid here, and the
   patchbay itself.
-- **Output.** It backs up an existing output file to `<out>.bak-<timestamp>` first. It writes the
+- **Output.** It replaces the output file and does not merge with servers already in it. It
+  backs up an existing output file to `<out>.bak-<timestamp>` first, so you can merge by hand. It writes the
   file at mode 0600, and never prints env or header values.
 
 Afterwards, remove the imported servers from Claude Code (`claude mcp remove <name>`), or they run
