@@ -444,11 +444,10 @@ npm run test:coverage                       # the same, with the coverage floors
 python3 -m unittest discover -s examples/write-gate -v
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [ARCHITECTURE.md](ARCHITECTURE.md) (the parts and how a
-request flows through them), [SPEC.md](SPEC.md) (the protocol and lifecycle contract) and
-[DECISIONS.md](DECISIONS.md). What is planned next, and what is not planned, is in
-[ROADMAP.md](ROADMAP.md). How the project is run, who does what and how it continues without any
-one person is in the organization's
+See [CONTRIBUTING.md](https://github.com/distronode-corporation/mcp-patchbay/blob/main/CONTRIBUTING.md), [ARCHITECTURE.md](https://github.com/distronode-corporation/mcp-patchbay/blob/main/ARCHITECTURE.md) (the parts and how a
+request flows through them), [SPEC.md](https://github.com/distronode-corporation/mcp-patchbay/blob/main/SPEC.md) (the protocol and lifecycle contract) and
+[DECISIONS.md](https://github.com/distronode-corporation/mcp-patchbay/blob/main/DECISIONS.md). What is planned next, and what is not planned, is in
+[ROADMAP.md](https://github.com/distronode-corporation/mcp-patchbay/blob/main/ROADMAP.md). How the project is run and who does what is in the organization's
 [GOVERNANCE.md](https://github.com/distronode-corporation/.github/blob/main/GOVERNANCE.md).
 
 Issues and source: <https://github.com/distronode-corporation/mcp-patchbay>.
