@@ -444,8 +444,12 @@ npm run test:coverage                       # the same, with the coverage floors
 python3 -m unittest discover -s examples/write-gate -v
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SPEC.md](SPEC.md) (the protocol and lifecycle contract)
-and [DECISIONS.md](DECISIONS.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [ARCHITECTURE.md](ARCHITECTURE.md) (the parts and how a
+request flows through them), [SPEC.md](SPEC.md) (the protocol and lifecycle contract) and
+[DECISIONS.md](DECISIONS.md). What is planned next, and what is not planned, is in
+[ROADMAP.md](ROADMAP.md). How the project is run, who does what and how it continues without any
+one person is in the organization's
+[GOVERNANCE.md](https://github.com/distronode-corporation/.github/blob/main/GOVERNANCE.md).
 
 Issues and source: <https://github.com/distronode-corporation/mcp-patchbay>.
 Security reports: see [SECURITY.md](SECURITY.md).
