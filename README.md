@@ -10,9 +10,9 @@
 **One MCP server that hosts all your others, and lets the agent switch them on and off mid-session, with a person approving the risky ones.**
 
 ```sh
-claude mcp add --scope user patchbay -- npx -y mcp-patchbay@0.1.1
-npx -y mcp-patchbay@0.1.1 import --from ~/.claude.json --out ~/.config/mcp-patchbay/servers.json
-npx -y mcp-patchbay@0.1.1 doctor --all
+claude mcp add --scope user patchbay -- npx -y mcp-patchbay@0.1.2
+npx -y mcp-patchbay@0.1.2 import --from ~/.claude.json --out ~/.config/mcp-patchbay/servers.json
+npx -y mcp-patchbay@0.1.2 doctor --all
 ```
 
 Register it as `patchbay`, copy your user-level Claude Code servers into its config with
