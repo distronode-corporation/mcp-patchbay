@@ -3,7 +3,7 @@
   "name": "io.github.distronode-corporation/mcp-patchbay",
   "title": "mcp-patchbay",
   "description": "Hosts your MCP servers and switches them on and off mid-session, with a person approving risky ones",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "websiteUrl": "https://github.com/distronode-corporation/mcp-patchbay#readme",
   "repository": {
     "url": "https://github.com/distronode-corporation/mcp-patchbay",
@@ -15,7 +15,7 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "mcp-patchbay",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

@@ -3,7 +3,7 @@
   "manifest_version": "0.3",
   "name": "mcp-patchbay",
   "display_name": "mcp-patchbay",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Hosts your MCP servers and lets Claude switch them on and off mid-session, with a person approving risky ones.",
   "long_description": "mcp-patchbay is an MCP server that hosts other MCP servers as child processes. Claude sees five small tools (`servers`, `enable`, `disable`, `restart` and `info`). When it enables a server, that server starts and its tools appear straight away; when it disables one, they disappear. Servers you mark `confirm` need a person, not the model, to approve each enable.\n\nOn first start it creates a private config with no servers at `~/.config/mcp-patchbay/servers.json`. Add your connectors to that file as the README's Quick start shows, then turn the extension off and on again.\n\nIt collects no data and sends nothing to its publisher. The servers you configure are separate programs with their own privacy policies.",
   "author": {
