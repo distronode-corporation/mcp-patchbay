@@ -1,7 +1,30 @@
 # mcp-patchbay
 
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/16485/badge)](https://www.bestpractices.dev/projects/16485)
-[Listed on mcpservers.org](https://mcpservers.org/servers/distronode-corporation/mcp-patchbay)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/distronode-corporation/mcp-patchbay/badge)](https://scorecard.dev/viewer/?uri=github.com/distronode-corporation/mcp-patchbay)
+[![npm](https://img.shields.io/npm/v/mcp-patchbay)](https://www.npmjs.com/package/mcp-patchbay)
+[![License: Apache-2.0](https://img.shields.io/github/license/distronode-corporation/mcp-patchbay)](LICENSE)
+[![CI](https://github.com/distronode-corporation/mcp-patchbay/actions/workflows/ci.yml/badge.svg)](https://github.com/distronode-corporation/mcp-patchbay/actions/workflows/ci.yml)
+[![Listed on mcpservers.org](https://img.shields.io/badge/listed%20on-mcpservers.org-01657d)](https://mcpservers.org/servers/distronode-corporation/mcp-patchbay)
+
+**One MCP server that hosts all your others, and lets the agent switch them on and off mid-session, with a person approving the risky ones.**
+
+```sh
+claude mcp add --scope user patchbay -- npx -y mcp-patchbay@0.1.2
+npx -y mcp-patchbay@0.1.2 import --from ~/.claude.json --out ~/.config/mcp-patchbay/servers.json
+npx -y mcp-patchbay@0.1.2 doctor --all
+```
+
+Register it as `patchbay`, copy your user-level Claude Code servers into its config with
+[`import`](#import), and check that each one starts. `import` replaces the `--out` file (it
+backs up the old one first) and prints what it imported and skipped: remove the imported servers
+from Claude Code, or they run twice. Or write the file by hand as in [Quick start](#quick-start).
+
+![A recorded MCP client session: five patchbay tools, a confirm prompt on enable, 16 filesystem tools appear, and disappear again on disable](docs/images/session.png)
+
+<sub>A real session against the public filesystem server, shortened to one line per step. Full walkthrough in [Quick start](#quick-start).</sub>
+
+Made by [Distronode](https://distronode.com). More open source from us: [github.com/distronode-corporation](https://github.com/distronode-corporation).
 
 > **If you allow `mcp__patchbay` as a whole in your client's permissions, you approve every tool of every server it hosts.**
 > Allow individual tools (`mcp__patchbay__<server>__<tool>`) instead. See [Policy and safety model](#policy-and-safety-model).
@@ -256,7 +279,8 @@ mcp-patchbay import --from ~/.claude.json --project /path/to/project --out ~/.co
 - **Skips.** It skips, and reports, servers it cannot host: `claude.ai …` connectors,
   `plugin:…` servers, `claude-in-chrome`, `ws` transports, names that are invalid here, and the
   patchbay itself.
-- **Output.** It backs up an existing output file to `<out>.bak-<timestamp>` first. It writes the
+- **Output.** It replaces the output file and does not merge with servers already in it. It
+  backs up an existing output file to `<out>.bak-<timestamp>` first, so you can merge by hand. It writes the
   file at mode 0600, and never prints env or header values.
 
 Afterwards, remove the imported servers from Claude Code (`claude mcp remove <name>`), or they run
