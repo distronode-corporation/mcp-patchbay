@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## Unreleased
+## 0.1.2 - 2026-11-18
 
 ### Added
 
@@ -14,7 +14,7 @@ All notable changes to this project are documented here. The format follows
 - A Claude Code plugin, `patchbay`, in `plugins/claude-code`: one MCP server that runs
   `npx -y mcp-patchbay@<version>`, with the directory listing fields (icon, documentation,
   support and privacy policy URLs). Its README explains the plugin tool prefix
-  `mcp__plugin_patchbay_patchbay__` and what in 0.1.1 still assumes `mcp__patchbay__`.
+  `mcp__plugin_patchbay_patchbay__` and what in 0.1.2 still assumes `mcp__patchbay__`.
 - `glama.json`, which names the GitHub account that maintains the server's listing in the
   Glama MCP directory.
 

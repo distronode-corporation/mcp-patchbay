@@ -9,7 +9,7 @@ are running and visible, so the rest cost no context and no processes. Servers y
 ## What it runs
 
 The plugin has one part: an MCP server named `patchbay`, started as
-`npx -y mcp-patchbay@0.1.1`. On first use `npx` downloads that exact version of the
+`npx -y mcp-patchbay@0.1.2`. On first use `npx` downloads that exact version of the
 [`mcp-patchbay`](https://www.npmjs.com/package/mcp-patchbay) package and its dependencies from
 the public npm registry. Nothing else is downloaded, and the plugin has no hooks, skills or
 scripts of its own.
@@ -21,7 +21,7 @@ hosted server, the patchbay starts it and its tools appear; when Claude disables
 Requirements: Node.js 22 or later on the `PATH` (for `npx`), and Claude Code 2.1.287 or later.
 The plugin has not been tried on native Windows. If the server does not start there, register
 it by hand as the [Quick start](https://github.com/distronode-corporation/mcp-patchbay#quick-start)
-shows, with `cmd /c npx -y mcp-patchbay@0.1.1` as the command.
+shows, with `cmd /c npx -y mcp-patchbay@0.1.2` as the command.
 
 ## Install
 
@@ -55,7 +55,7 @@ tools are `mcp__plugin_patchbay_patchbay__<tool>`, and a hosted server's tools a
 `mcp__plugin_patchbay_patchbay__<prefix or server name>__<tool>`, with the tool name
 sanitized as the
 [naming contract](https://github.com/distronode-corporation/mcp-patchbay#naming-contract)
-describes. Two parts of mcp-patchbay 0.1.1 assume the
+describes. Two parts of mcp-patchbay 0.1.2 assume the
 shorter `mcp__patchbay__` prefix of a server registered by hand with
 `claude mcp add ... patchbay`:
 
