@@ -13,7 +13,7 @@
         "url": "https://github.com/distronode-corporation/mcp-patchbay.git",
         "path": "plugins/claude-code",
         "ref": "main",
-        "sha": "63842ee5e850f9bdc59ec726e17febb7549feec1"
+        "sha": "cf00b10a9518b9a8f5a37c9fb035955ada48a386"
       },
       "description": "Hosts your MCP servers and lets Claude switch them on and off mid-session, with a person approving risky ones."
     }
