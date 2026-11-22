@@ -448,6 +448,10 @@ gh attestation verify mcp-patchbay-<version>.mcpb --repo distronode-corporation/
   --signer-workflow distronode-corporation/mcp-patchbay/.github/workflows/release.yml
 ```
 
+From the first release after 0.1.2, the release also carries the attestation's Sigstore bundle,
+`mcp-patchbay-<version>.mcpb.sigstore.json`; add `--bundle` with that file to check against it
+instead of fetching the attestation from GitHub.
+
 The bundle attached to 0.1.1 has no attestation; install 0.1.1 from npm if you need one you can check.
 
 ## Privacy Policy

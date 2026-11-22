@@ -42,16 +42,29 @@ const RULES = [
 const B64 = /(^|[^A-Za-z0-9+/_=-])([A-Za-z0-9+_-][A-Za-z0-9+/_-]{39,}={0,2})/g;
 
 /**
- * Redacts secrets from `input`.
+ * `input` as text. Never throws: callers pass whatever was thrown or rejected (cli.js), and
+ * String() throws for values such as `{ toString: 0 }` or `Object.create(null)`.
+ * @param {unknown} input
+ * @returns {string}
+ */
+function toText(input) {
+  try {
+    if (input instanceof Error) return `${input.name}: ${input.message}`;
+    return typeof input === 'string' ? input : String(input);
+  } catch {
+    try { return Object.prototype.toString.call(input); } catch { return '[unprintable value]'; }
+  }
+}
+
+/**
+ * Redacts secrets from `input`. Never throws.
  * @param {unknown} input
  * @param {string[]} [secrets] exact strings to scrub (already filtered by length)
  * @returns {string}
  */
 export function redact(input, secrets = []) {
-  let s;
   if (input === undefined || input === null) return '';
-  if (input instanceof Error) s = `${input.name}: ${input.message}`;
-  else s = typeof input === 'string' ? input : String(input);
+  let s = toText(input);
   if (secrets.length) {
     const sorted = [...new Set(secrets)].sort((a, b) => b.length - a.length);
     for (const secret of sorted) {
