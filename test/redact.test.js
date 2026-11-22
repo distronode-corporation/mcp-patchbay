@@ -57,6 +57,21 @@ test('non-string input is stringified', () => {
   assert.equal(redact(undefined), '');
 });
 
+test('values String() cannot convert do not make redact throw', () => {
+  // cli.js passes whatever main() rejected with; String() throws for these.
+  assert.equal(redact({ toString: 0 }), '[object Object]');
+  assert.equal(redact(Object.create(null)), '[object Object]');
+  const err = new Error('x');
+  Object.defineProperty(err, 'name', { get() { throw new Error('getter'); } });
+  assert.equal(redact(err), '[object Error]');
+  const hostile = new Proxy({}, {
+    get() { throw new Error('get'); },
+    getPrototypeOf() { throw new Error('getPrototypeOf'); },
+  });
+  assert.equal(redact(hostile), '[unprintable value]');
+  assert.equal(redact({ toString: () => 'token=abcdef123' }), 'token=[redacted]');
+});
+
 test('a remote url is a secret: whole, each path segment of 6+ chars, and each query value', () => {
   const entry = { url: 'https://mcp.example.com/s/Zk3aQ9xLm2Pq7/mcp?team=acme-team&k=v' };
   const secrets = secretsFor(entry);

@@ -32,10 +32,28 @@ const toolEntry = fc.oneof(
     name: fc.oneof(fc.string(), fc.stringMatching(/^[a-z_.]{1,12}$/), fc.string({ minLength: 100, maxLength: 140 })),
     inputSchema: fc.constant({ type: 'object' }),
     description: fc.option(fc.string(), { nil: undefined }),
+    execution: fc.option(fc.record({ taskSupport: fc.constantFrom('required', 'optional', 'forbidden') }), { nil: undefined }),
   }, { requiredKeys: ['name', 'inputSchema'] }),
   fc.record({ name: fc.anything(), inputSchema: fc.anything() }, { requiredKeys: [] }),
   fc.anything(),
 );
+
+// Fixed cases, run on every seed: an entry of the same name that is skipped (task-required,
+// invalid) before the one that is published, and two valid entries of the same name.
+const duplicateNameExamples = [
+  ['srv', [
+    { name: 'dup', inputSchema: { type: 'object' }, execution: { taskSupport: 'required' }, description: 'task' },
+    { name: 'dup', inputSchema: { type: 'object' }, description: 'plain' },
+  ]],
+  ['srv', [
+    { name: 'dup', inputSchema: 5 },
+    { name: 'dup', inputSchema: { type: 'object' }, description: 'valid' },
+  ]],
+  ['srv', [
+    { name: 'dup', inputSchema: { type: 'object' }, description: 'first' },
+    { name: 'dup', inputSchema: { type: 'object' }, description: 'second' },
+  ]],
+];
 
 test('property: mapTools never throws on any tool list, and every tool is published or skipped, once', () => {
   fc.assert(
@@ -49,13 +67,16 @@ test('property: mapTools never throws on any tool list, and every tool is publis
         assert.ok(CLIENT_PREFIX.length + p.exposed.length <= MAX_CLIENT_NAME, p.exposed);
         assert.deepEqual(splitExposed(p.exposed)?.segment, seg);
         assert.equal(p.exposed, exposedName(seg, p.original));
-        // Everything but `name` passes through unchanged.
-        const source = tools.find((t) => t?.name === p.original);
+        // Everything but `name` passes through unchanged. Compare with the entry that was
+        // published: with duplicate names, earlier entries of the same name may have been
+        // skipped (invalid, task-required), so it is the first one that passes on its own.
+        const source = tools.find((t) => t?.name === p.original && mapTools(seg, [t]).published.length === 1);
+        assert.ok(source, p.original);
         assert.deepEqual({ ...p.tool, name: p.original }, { ...source });
       }
       for (const s of skipped) assert.equal(typeof s.reason, 'string');
     }),
-    { numRuns: 300 },
+    { numRuns: 300, examples: duplicateNameExamples },
   );
 });
 
@@ -84,6 +105,7 @@ test('property: redact never throws, and no secret it was given survives in its 
     fc.property(fc.anything(), (input) => {
       assert.equal(typeof redact(input), 'string');
     }),
-    { numRuns: 200 },
+    // Fixed cases, run on every seed: values String() throws for.
+    { numRuns: 200, examples: [[{ toString: 0 }], [Object.create(null)]] },
   );
 });
