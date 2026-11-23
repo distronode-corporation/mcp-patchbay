@@ -21,3 +21,9 @@ updates:
     cooldown:
       default-days: 14
     open-pull-requests-limit: 5
+    groups:
+      # One PR for the whole group: the codeql-action steps (init, analyze,
+      # upload-sarif) must move together, or CodeQL fails the workflow with
+      # "Loaded a configuration file for version X, but running version Y".
+      github-actions-minor:
+        update-types: [minor, patch]
