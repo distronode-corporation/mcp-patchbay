@@ -21,3 +21,13 @@ updates:
     cooldown:
       default-days: 14
     open-pull-requests-limit: 5
+    groups:
+      # One PR for the whole group: the codeql-action steps (init, analyze,
+      # upload-sarif) must move together, or CodeQL fails the workflow with
+      # "Loaded a configuration file for version X, but running version Y".
+      # Majors included: a major release the group did not take would split
+      # across the three steps again, reopening the mismatch it exists to close.
+      # Grouping is all this does; dependabot-auto-merge.yml still leaves every
+      # action bump for a person.
+      github-actions:
+        update-types: [major, minor, patch]
