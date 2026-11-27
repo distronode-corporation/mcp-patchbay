@@ -448,7 +448,7 @@ export function jsonSyntaxMessage(what, text) {
  * @param {string} dir
  */
 export function checkDirPermissions(file, dir) {
-  if (process.platform === 'win32') return;
+  // Not called on Windows: both callers check directories on POSIX only.
   let st;
   try {
     st = fs.statSync(dir);
