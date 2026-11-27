@@ -3,8 +3,9 @@
   "include": ["src/**"],
   "reporter": ["text"],
   "check-coverage": true,
-  "lines": 98,
-  "statements": 98,
+  "per-file": true,
+  "lines": 100,
+  "statements": 100,
   "functions": 100,
-  "branches": 97
+  "branches": 100
 }
