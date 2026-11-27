@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // `mcp-patchbay rename-permissions`: add mcp__patchbay__ twins of existing MCP permission rules.
 // Never removes or reorders a rule. See SPEC.md §10.
 import fs from 'node:fs';

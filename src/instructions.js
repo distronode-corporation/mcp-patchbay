@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // The patchbay's own `instructions` (initialize result). See SPEC.md §3.4.
 
 export const MAX_INSTRUCTIONS = 4096;

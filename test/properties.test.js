@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Property tests (fast-check) over the code that handles what child servers send: the tool
 // names and tool lists from a child's tools/list (naming.js), and the text redact.js scrubs
 // before the patchbay logs or reports it.

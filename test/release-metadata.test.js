@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // The release metadata agrees with package.json: the MCP Registry's server.json, the Claude
 // Desktop bundle's manifest, the CHANGELOG and the README's pinned commands.
 import { test } from 'node:test';

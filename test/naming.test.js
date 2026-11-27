@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitizeToolName, exposedName, mapTools, splitExposed, isValidSegment, CLIENT_PREFIX, MAX_CLIENT_NAME } from '../src/naming.js';

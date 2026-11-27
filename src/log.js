@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // stderr-only logging. stdout belongs to MCP.
 import { redact } from './redact.js';
 

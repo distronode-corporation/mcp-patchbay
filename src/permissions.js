@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Claude Code permission rules that would approve enable_confirm without asking the person.
 // Used by `doctor` (to warn) and `rename-permissions` (never to write one). See SECURITY-MODEL.md.
 import fs from 'node:fs';

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Config location, strict validation and the permission check. See SPEC.md §2.
 import fs from 'node:fs';
 import os from 'node:os';

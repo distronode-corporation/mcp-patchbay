@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Distronode Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 root = true
 
 [*]
@@ -15,6 +19,12 @@ indent_size = 4
 trim_trailing_whitespace = false
 
 [LICENSE]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = unset
+
+# The licence texts REUSE keeps in LICENSES/, verbatim like LICENSE.
+[LICENSES/**]
 indent_style = unset
 indent_size = unset
 trim_trailing_whitespace = unset

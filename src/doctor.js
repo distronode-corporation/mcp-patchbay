@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // `mcp-patchbay doctor`: validate the config, check Claude Code's allow rules against
 // enable_confirm, and briefly start servers. See SPEC.md §10.
 import path from 'node:path';

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Redaction of secrets in text that the patchbay itself emits: logs, errors, `servers`/`info`
 // output, doctor output. Pass-through content (tool results, tool lists, child instructions) is
 // not touched. See SPEC.md §6.

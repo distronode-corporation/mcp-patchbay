@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // The patchbay: an MCP server whose tools are its own five (six with confirmVia "host") plus those
 // of the children that are switched on. See SPEC.md §3-§5 and §8.
 import { randomUUID } from 'node:crypto';

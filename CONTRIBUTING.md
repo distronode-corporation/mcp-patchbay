@@ -2,6 +2,8 @@
 
 Thank you for helping. Some ground rules keep the patchbay small and trustworthy.
 
+New here? Issues labelled [good first issue](https://github.com/distronode-corporation/mcp-patchbay/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22) are small, well scoped and need no access beyond this repository.
+
 ## Principles
 
 - **No generic call or exec tool, ever.** The patchbay's own tool surface is `servers`, `enable`,

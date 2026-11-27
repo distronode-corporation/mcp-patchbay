@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Distronode Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for write_gate.py. Run: python3 -m unittest discover -s examples/write-gate -v"""
 import json
 import os

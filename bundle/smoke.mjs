@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Starts an unpacked bundle the way its manifest says, with a fresh, empty home directory, and
 // checks the zero-config first run end to end over stdio: initialize, the tool list, `servers`
 // returning no servers, and the starter config written at the default path.

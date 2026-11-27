@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Races between restart, disable, enable and a crash, driven in-process so they are
 // deterministic: toolRestart() sets the slot to "off" synchronously before it awaits the stop.
 import { test } from 'node:test';
