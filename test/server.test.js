@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema, ToolListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -325,7 +326,7 @@ test('notifications/elicitation/complete from a child goes to a client with url 
 /** A url server whose stand-in for mcp-remote prints `lines` on stderr, then serves. */
 function remote(dir, lines, env = {}) {
   const bin = path.join(dir, `remote-${Math.random().toString(36).slice(2)}.mjs`);
-  fs.writeFileSync(bin, `${lines.map((l) => `console.error(${JSON.stringify(l)});`).join('\n')}\nawait import(${JSON.stringify(new URL(`file://${SCRIPTED}`).href)});\n`);
+  fs.writeFileSync(bin, `${lines.map((l) => `console.error(${JSON.stringify(l)});`).join('\n')}\nawait import(${JSON.stringify(pathToFileURL(SCRIPTED).href)});\n`);
   return {
     entry: { policy: 'allow', url: 'https://mcp.example.com/mcp', env: { SCRIPTED_PAGES: 'one', ...env } },
     env: { ...process.env, MCP_PATCHBAY_MCP_REMOTE_BIN: bin },
