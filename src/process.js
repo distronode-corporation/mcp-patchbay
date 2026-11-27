@@ -15,9 +15,11 @@ const IS_WINDOWS = process.platform === 'win32';
 function userTag() {
   const uid = process.getuid?.();
   if (uid !== undefined) return String(uid);
-  // Only Windows has no getuid, and there os.userInfo() always names the signed-in user (never
-  // empty, and the replacement keeps its length).
-  return os.userInfo().username.replace(/[^A-Za-z0-9_-]/g, '_');
+  // Only Windows gets here. os.userInfo() throws when it cannot read the user's profile; a
+  // username it returns is never empty, and the replacement keeps its length.
+  let name;
+  try { name = os.userInfo().username; } catch { return 'user'; }
+  return name.replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 /**
@@ -57,10 +59,14 @@ export function commandLineOf(pid) {
 export function commandLineOfAsync(pid) {
   if (process.platform === 'linux' || !Number.isInteger(pid) || pid <= 0) return Promise.resolve(commandLineOf(pid));
   const c = commandLineQuery(pid);
-  // execFile reports every failure (ps or PowerShell missing, a timeout) to the callback; it
-  // throws only for invalid arguments, and these are fixed.
+  // execFile reports most failures (ps or PowerShell missing, a timeout) to the callback, but
+  // throws others from spawn (ELOOP, for a symlink loop on PATH).
   return new Promise((resolve) => {
-    execFile(c.file, c.args, c.opts, (err, out) => resolve(err ? null : String(out).trim() || null));
+    try {
+      execFile(c.file, c.args, c.opts, (err, out) => resolve(err ? null : String(out).trim() || null));
+    } catch {
+      resolve(null);
+    }
   });
 }
 
@@ -181,11 +187,13 @@ setTimeout(() => {
  */
 export function killGroupsLater(items, delayMs = SHUTDOWN_KILL_DELAY_MS) {
   if (IS_WINDOWS || !items.length) return;
-  // A failed spawn is reported through 'error' (the reaper of the next start is the fallback);
-  // spawn throws only for invalid arguments, and these are node itself and two strings.
-  const h = spawn(process.execPath, ['-e', KILL_HELPER, String(delayMs), JSON.stringify(items)], { detached: true, stdio: 'ignore' });
-  h.on('error', () => {});
-  h.unref();
+  // A failed launch is reported through 'error', or thrown from spawn (E2BIG, for a list too
+  // long for one argument). Either way the reaper of the next start is the fallback.
+  try {
+    const h = spawn(process.execPath, ['-e', KILL_HELPER, String(delayMs), JSON.stringify(items)], { detached: true, stdio: 'ignore' });
+    h.on('error', () => {});
+    h.unref();
+  } catch { /* the next start reaps them */ }
 }
 
 /** How long the reaper waits after SIGTERM before it sends SIGKILL. */

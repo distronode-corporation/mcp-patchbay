@@ -89,9 +89,17 @@ test('lookups of this process find its command line, and on POSIX its process gr
   }
 });
 
-test('a process with no command line reads as null', { skip: process.platform === 'darwin' && 'every macOS process has a command line ps can show' }, async () => {
-  // Linux: kthreadd (pid 2) is a kernel thread with an empty /proc/2/cmdline. Windows: the
-  // System process (pid 4) has no CommandLine.
+/** Linux outside a PID namespace: pid 2 is kthreadd, a kernel thread with no command line. */
+function kthreadd() {
+  try { return fs.readFileSync('/proc/2/comm', 'utf8').trim() === 'kthreadd'; } catch { return false; }
+}
+
+test('a process with no command line reads as null', {
+  skip: (process.platform === 'darwin' && 'every macOS process has a command line ps can show')
+    || (process.platform === 'linux' && !kthreadd() && 'pid 2 is not kthreadd here (a PID namespace)'),
+}, async () => {
+  // Linux: kthreadd (pid 2), with an empty /proc/2/cmdline. Windows: the System process (pid 4),
+  // which has no CommandLine.
   const pid = IS_WINDOWS ? 4 : 2;
   assert.equal(commandLineOf(pid), null);
   assert.equal(await commandLineOfAsync(pid), null);
@@ -207,9 +215,30 @@ test('a leftover reaped while its directory turns read-only is still killed', { 
   const file = path.join(dir, `${GONE}-${child.pid}.json`);
   fs.writeFileSync(file, JSON.stringify({ owner: GONE, pid: child.pid, cmd: hashCommandLine(cmd), start: processStartTime(child.pid) }));
   assert.equal(pf.reap(100), 1);
-  await exited;
+  // Read-only before the grace timer fires, however long the child takes to go.
   fs.chmodSync(dir, 0o500);
   t.after(() => fs.chmodSync(dir, 0o700));
+  await exited;
   await new Promise((r) => setTimeout(r, 250)); // past the grace period: the removal fails quietly
   assert.ok(fs.existsSync(file));
+});
+
+test('the Windows user tag falls back to "user" when the profile cannot be read', { skip: !IS_WINDOWS && 'only Windows has no getuid' }, (t) => {
+  t.mock.method(os, 'userInfo', () => { throw Object.assign(new Error('uv_os_get_passwd returned ENOENT'), { code: 'ERR_SYSTEM_ERROR' }); });
+  assert.equal(pidDirFor({}), path.join(os.tmpdir(), 'mcp-patchbay-user'));
+});
+
+test('a command line lookup that spawn refuses outright (a symlink loop for ps on PATH) is null', { skip: process.platform !== 'darwin' && 'ps is used on macOS only' }, async (t) => {
+  const bin = tmpdir();
+  fs.symlinkSync(path.join(bin, 'ps'), path.join(bin, 'ps'));
+  const saved = process.env.PATH;
+  t.after(() => { process.env.PATH = saved; });
+  process.env.PATH = bin;
+  assert.equal(await commandLineOfAsync(process.pid), null);
+});
+
+test('a kill list too long for one argument is left to the next start\'s reaper', { skip: POSIX_ONLY }, () => {
+  // Pids no system hands out: if the helper did start, it would signal nothing.
+  const items = Array.from({ length: 40000 }, () => ({ pid: GONE, start: '1', file: '/nonexistent/pidfile.json' }));
+  assert.doesNotThrow(() => killGroupsLater(items));
 });
