@@ -31,12 +31,12 @@ Usage:
 `;
 
 /**
- * Minimal argv parser: --flag value, --switch, positionals.
+ * Minimal argv parser: --flag value, --flag=value, positionals. (No caller has value-less
+ * switches, so there are none.)
  * @param {string[]} argv
- * @param {string[]} switches flags without a value
  */
-export function parseArgs(argv, switches = []) {
-  /** @type {Record<string, string | boolean>} */
+export function parseArgs(argv) {
+  /** @type {Record<string, string>} */
   const flags = {};
   const positionals = [];
   for (let i = 0; i < argv.length; i++) {
@@ -45,8 +45,6 @@ export function parseArgs(argv, switches = []) {
       const eq = a.indexOf('=');
       if (eq !== -1) {
         flags[a.slice(2, eq)] = a.slice(eq + 1);
-      } else if (switches.includes(a.slice(2))) {
-        flags[a.slice(2)] = true;
       } else {
         const v = argv[i + 1];
         if (v === undefined || v.startsWith('--')) throw new Error(`${a} needs a value`);
@@ -110,10 +108,8 @@ async function serve(argv) {
   }
 
   const patchbay = new Patchbay(config, { log, pidFiles });
-  let down = false;
+  // No guard against a second call: process.exit below never returns.
   const shutdown = (why) => {
-    if (down) return;
-    down = true;
     patchbay.shutdownSync();
     log.debug(`shut down (${why})`);
     process.exit(0);
@@ -166,6 +162,7 @@ async function main() {
 }
 
 main().catch((e) => {
-  process.stderr.write(`mcp-patchbay: ${redact(/** @type {Error} */ (e)?.stack ?? e)}\n`);
+  // main rejects only with Errors: everything it awaits is this package's code or node's.
+  process.stderr.write(`mcp-patchbay: ${redact(/** @type {Error} */ (e).stack)}\n`);
   process.exit(1);
 });

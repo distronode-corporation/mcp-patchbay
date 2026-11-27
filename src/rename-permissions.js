@@ -121,7 +121,8 @@ export async function runRenamePermissions(argv) {
   try {
     text = fs.readFileSync(file, 'utf8');
   } catch (e) {
-    process.stderr.write(`rename-permissions: cannot read ${file}: ${/** @type {any} */ (e).code ?? /** @type {Error} */ (e).message}\n`);
+    // Every error readFileSync throws carries a code (system and argument errors alike).
+    process.stderr.write(`rename-permissions: cannot read ${file}: ${/** @type {any} */ (e).code}\n`);
     return 1;
   }
   try {
@@ -146,12 +147,9 @@ export async function runRenamePermissions(argv) {
     process.stdout.write(lines.join('\n') + '\n');
     return 0;
   }
-  settings.permissions ??= {};
-  for (const list of LISTS) {
-    if (!additions[list].length) continue;
-    if (!Array.isArray(settings.permissions[list])) settings.permissions[list] = [];
-    settings.permissions[list].push(...additions[list]);
-  }
+  // A list only gains rules computeAdditions found in it, so settings.permissions and that list
+  // already exist as an object and an array.
+  for (const list of LISTS) if (additions[list].length) settings.permissions[list].push(...additions[list]);
   const mode = fs.statSync(file).mode & 0o777;
   const bak = backup(file);
   const indent = /^\{\n(\s+)/.exec(text)?.[1] ?? '  ';

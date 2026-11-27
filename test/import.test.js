@@ -140,3 +140,67 @@ test('a JSON syntax error in the Claude config does not echo its contents', () =
   assert.ok(r.stderr.includes(from));
   assert.ok(!r.stderr.includes('SECRET') && !r.stderr.includes('ghp_') && !r.stderr.includes('TOKEN'), r.stderr);
 });
+
+test('import skips definitions it cannot convert or that fail validation, and keeps the rest', () => {
+  const dir = tmpdir();
+  const from = path.join(dir, 'claude.json');
+  const cwd = path.resolve(dir, 'work');
+  fs.writeFileSync(from, JSON.stringify({
+    mcpServers: {
+      'example-null': null,
+      'example-string': 'npx something',
+      'example-untyped-url': { url: 'https://mcp.example.com/untyped' },
+      'example-http-no-url': { type: 'http' },
+      'example-empty-command': { command: '' },
+      'example-cwd': { command: 'node', args: [], env: {}, cwd },
+      'example-number-args': { command: 'node', args: [1, 2] },
+      'example-plain-http': { type: 'http', url: 'http://mcp.example.com/mcp', headers: {} },
+    },
+    projects: { [PROJECT]: {} },
+  }));
+  const out = path.join(dir, 'servers.json');
+  const r = runImport(['--from', from, '--project', PROJECT, '--out', out]);
+  assert.equal(r.status, 0, r.stderr);
+  const cfg = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.deepEqual(cfg.servers, {
+    'example-untyped-url': { description: 'Imported from Claude Code (http)', policy: 'allow', url: 'https://mcp.example.com/untyped' },
+    'example-cwd': { description: 'Imported from Claude Code (stdio)', policy: 'allow', command: 'node', cwd },
+  });
+  assert.deepEqual(cfg.autostart.projects[PROJECT], ['example-untyped-url', 'example-cwd'], 'a project with no lists of its own');
+  assert.match(r.stdout, /^ {2}example-null: definition is not an object$/m);
+  assert.match(r.stdout, /^ {2}example-string: definition is not an object$/m);
+  assert.match(r.stdout, /^ {2}example-http-no-url: type http without a url$/m);
+  assert.match(r.stdout, /^ {2}example-empty-command: stdio without a command$/m);
+  assert.match(r.stdout, /^ {2}example-number-args: not valid here: servers\.example-number-args\.args must be an array of strings$/m);
+  assert.match(r.stdout, /^ {2}example-plain-http: not valid here: .*must use https/m);
+});
+
+test('import --project that imports nothing says the autostart list is empty', () => {
+  const dir = tmpdir();
+  const from = path.join(dir, 'claude.json');
+  fs.writeFileSync(from, JSON.stringify({ projects: { [PROJECT]: { mcpServers: {}, disabledMcpServers: 'not a list' } } }));
+  const r = runImport(['--from', from, '--project', PROJECT, '--out', path.join(dir, 'servers.json')]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, new RegExp(`^Autostart for ${PROJECT}: \\(none\\)$`, 'm'));
+});
+
+test('import usage errors: a flag with no value and an unknown argument exit 64', () => {
+  const missing = runImport(['--from']);
+  assert.equal(missing.status, 64);
+  assert.match(missing.stderr, /^import: --from needs a value$/m);
+  const unknown = runImport(['--frm', 'claude.json']);
+  assert.equal(unknown.status, 64);
+  assert.match(unknown.stderr, /^import: unknown argument --frm$/m);
+  assert.match(unknown.stderr, /^Usage: mcp-patchbay import /m);
+});
+
+test('import without --out writes the default config path under the home directory', () => {
+  const home = tmpdir();
+  const from = path.join(home, 'claude.json');
+  fs.writeFileSync(from, JSON.stringify({ mcpServers: { 'example-files': { command: 'node' } } }));
+  const r = spawnSync(process.execPath, [CLI, 'import', '--from', from], { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: home } });
+  assert.equal(r.status, 0, r.stderr);
+  const out = path.join(home, '.config', 'mcp-patchbay', 'servers.json');
+  assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(out, 'utf8')).servers), ['example-files']);
+  assert.match(r.stdout, /Wrote .*servers\.json \(mode 0600\)/);
+});

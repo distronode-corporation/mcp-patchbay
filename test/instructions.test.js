@@ -4,7 +4,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildInstructions, fairShare, MAX_INSTRUCTIONS } from '../src/instructions.js';
+import { buildInstructions, fairShare, MAX_INSTRUCTIONS, truncate } from '../src/instructions.js';
 import { fake, startPatchbay, tmpdir } from './helpers.js';
 
 test('fairShare water-fills a budget', () => {
@@ -97,4 +97,21 @@ test('with confirmVia host the header names enable_confirm', () => {
   assert.match(buildInstructions(servers, [], { confirmVia: 'host' }), /`enable_confirm` \{name\}/);
   assert.doesNotMatch(buildInstructions(servers, []), /enable_confirm/);
   assert.doesNotMatch(buildInstructions(servers, [], { confirmVia: 'elicitation' }), /enable_confirm/);
+});
+
+test('truncate cuts without a marker when the limit is shorter than the marker', () => {
+  assert.equal(truncate('abcdefghijklmnopqrstuvwxyz', 5), 'abcde');
+  assert.equal(truncate('abcdefghijklmnopqrstuvwxyz', 0), '');
+  assert.equal(truncate('abcdefghijklmnopqrstuvwxyz', 20), 'abcdefgh…[truncated]');
+  assert.equal(truncate('short', 5), 'short');
+});
+
+test('a catalogue line too long for the limit leaves no room for instructions and is cut to the limit', () => {
+  // The last line is always kept whole by the catalogue loop, so only the final cut bounds it.
+  const servers = [{ name: 'x'.repeat(MAX_INSTRUCTIONS * 2), description: 'd', policy: 'allow', state: 'on' }];
+  const text = buildInstructions(servers, [{ name: 'auto', instructions: 'never shown' }]);
+  assert.equal(text.length, MAX_INSTRUCTIONS);
+  assert.ok(text.endsWith('…[truncated]'));
+  assert.ok(!text.includes('never shown'));
+  assert.ok(!text.includes('## auto instructions'));
 });

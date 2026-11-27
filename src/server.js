@@ -59,6 +59,7 @@ export class Patchbay {
    * @param {import('./process.js').PidFiles | null} [o.pidFiles]
    * @param {NodeJS.ProcessEnv} [o.env]
    * @param {string} [o.projectDir]
+   * @param {number} [o.startTimeoutMs] how long a stdio child may take to start (default 120 s)
    */
   constructor(config, o) {
     this.config = config;
@@ -66,6 +67,7 @@ export class Patchbay {
     this.pidFiles = o.pidFiles ?? null;
     this.env = o.env ?? process.env;
     this.projectDir = o.projectDir ?? this.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+    this.startTimeoutMs = o.startTimeoutMs ?? STDIO_START_TIMEOUT_MS;
     /** @type {Map<string, Slot>} */
     this.slots = new Map();
     /** @type {Map<string, Slot>} */
@@ -89,10 +91,9 @@ export class Patchbay {
     this.autostarted = [];
     this.initialized = false;
     this.closed = false;
-    /** @type {() => void} */
-    let markReady = () => {};
-    this.clientReady = new Promise((r) => { markReady = r; });
-    this.markReady = markReady;
+    const ready = /** @type {PromiseWithResolvers<void>} */ (Promise.withResolvers());
+    this.clientReady = ready.promise;
+    this.markReady = ready.resolve;
 
     this.server = new Server({ name: 'mcp-patchbay', version: VERSION }, { capabilities: { tools: { listChanged: true } } });
     this.server.onerror = (e) => this.log.debug(`protocol: ${e.message}`);
@@ -577,7 +578,7 @@ export class Patchbay {
 
     const timeout = entry.kind === 'url'
       ? this.config.oauth.authTimeoutSeconds * 1000 + REMOTE_START_GRACE_MS
-      : STDIO_START_TIMEOUT_MS;
+      : this.startTimeoutMs;
 
     const p = (async () => {
       try {
@@ -607,7 +608,7 @@ export class Patchbay {
         }
         return { ok: false, error: slot.lastError ?? 'disabled while starting' };
       } finally {
-        slot.startAbort?.abort('start finished');
+        /** @type {AbortController} */ (slot.startAbort).abort('start finished');
         slot.startPromise = null;
       }
     })();
@@ -622,13 +623,15 @@ export class Patchbay {
    * @param {number} timeout
    */
   #describeStartError(slot, child, e, timeout) {
+    // A start rejects only with Errors, and a url child is node running mcp-remote, which is
+    // there: only a stdio command can be missing.
     const err = /** @type {any} */ (e);
     let msg;
-    if (err?.code === 'ENOENT') msg = `could not start ${slot.entry.kind === 'url' ? 'mcp-remote' : 'the command'}: not found (ENOENT)`;
-    else if (typeof err?.code === 'string') msg = `could not start: ${err.code}`;
+    if (err.code === 'ENOENT') msg = 'could not start the command: not found (ENOENT)';
+    else if (typeof err.code === 'string') msg = `could not start: ${err.code}`;
     else if (err instanceof McpError && err.code === ErrorCode.RequestTimeout) msg = `did not finish starting within ${Math.round(timeout / 1000)} s`;
     else if (err instanceof McpError && err.code === ErrorCode.ConnectionClosed) msg = 'exited during startup';
-    else msg = String(err?.message ?? err).replace(/^MCP error -?\d+: /, '');
+    else msg = err.message.replace(/^MCP error -?\d+: /, '');
     const last = child.stderrTail(1)[0];
     if (last) msg += `; last stderr: ${last}`;
     return redact(msg, child.secrets);
@@ -819,7 +822,8 @@ export class Patchbay {
         throw new McpError(e.code, redact(e.message.replace(/^MCP error -?\d+: /, ''), child.secrets), e.data);
       }
       if (child.transport?.exited) throw new McpError(ErrorCode.ConnectionClosed, `${slot.name} exited during the call`);
-      throw new McpError(ErrorCode.InternalError, redact(/** @type {Error} */ (e)?.message ?? String(e), child.secrets));
+      // child.call rejects only with Errors (the SDK's, or the transport's write errors).
+      throw new McpError(ErrorCode.InternalError, redact(/** @type {Error} */ (e).message, child.secrets));
     } finally {
       slot.inFlight--;
     }
@@ -857,11 +861,10 @@ export class Patchbay {
   shutdownSync() {
     this.closed = true;
     const pending = [];
+    // None of these throw: killNow signals inside a try, and the others only read.
     for (const slot of this.slots.values()) {
-      try {
-        const pid = slot.child?.killNow();
-        if (pid) pending.push({ pid, start: processStartTime(pid), file: this.pidFiles?.enabled ? this.pidFiles.file(pid) : undefined });
-      } catch { /* keep going */ }
+      const pid = slot.child?.killNow();
+      if (pid) pending.push({ pid, start: processStartTime(pid), file: this.pidFiles?.enabled ? this.pidFiles.file(pid) : undefined });
     }
     killGroupsLater(pending);
   }

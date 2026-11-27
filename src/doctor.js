@@ -118,7 +118,8 @@ export async function runDoctor(argv, io = {}) {
     } catch (e) {
       failed++;
       const last = child.stderrTail(1)[0];
-      const why = String(/** @type {any} */ (e)?.code === 'ENOENT' ? 'command not found (ENOENT)' : /** @type {Error} */ (e)?.message ?? e).replace(/^MCP error -?\d+: /, '');
+      // start and listTools reject only with Errors (spawn's, the SDK's McpError, our own).
+      const why = (/** @type {any} */ (e).code === 'ENOENT' ? 'command not found (ENOENT)' : /** @type {Error} */ (e).message).replace(/^MCP error -?\d+: /, '');
       out(`${name}: failed: ${redact(last ? `${why}; first stderr: ${child.stderrTail(20)[0]}` : why, child.secrets)}\n`);
     } finally {
       await child.close().catch(() => {});

@@ -55,7 +55,8 @@ export function scanSettings(files) {
     } catch (e) {
       const code = /** @type {any} */ (e).code;
       if (code === 'ENOENT') return { file, status: 'missing', rules: [], bypass: false };
-      return { file, status: 'unreadable', error: `cannot read: ${code ?? e}`, rules: [], bypass: false };
+      // Every error readFileSync throws carries a code (system and argument errors alike).
+      return { file, status: 'unreadable', error: `cannot read: ${code}`, rules: [], bypass: false };
     }
     let settings;
     try {

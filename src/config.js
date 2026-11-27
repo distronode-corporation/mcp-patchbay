@@ -44,6 +44,8 @@ export function defaultConfigPath(home = os.homedir()) {
 export const STARTER_CONFIG = '{\n  "version": 1,\n  "servers": {}\n}\n';
 
 /** @param {string} p */
+// Errors from node:fs always carry a code (system and argument errors alike), so the messages
+// below quote the code alone.
 const samePath = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
 
 /**
@@ -72,7 +74,7 @@ export function ensureStarterConfig(file, home = os.homedir()) {
     const made = fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     if (posix && made !== undefined) fs.chmodSync(dir, 0o700);
   } catch (e) {
-    throw new ConfigError(`cannot create the config directory ${dir}: ${/** @type {any} */ (e).code ?? e}`);
+    throw new ConfigError(`cannot create the config directory ${dir}: ${/** @type {any} */ (e).code}`);
   }
   if (posix) checkDirPermissions(def, dir);
   let fd;
@@ -81,7 +83,7 @@ export function ensureStarterConfig(file, home = os.homedir()) {
     fd = fs.openSync(def, 'wx', 0o600);
   } catch (e) {
     if (/** @type {any} */ (e).code === 'EEXIST') return false;
-    throw new ConfigError(`cannot create config ${def}: ${/** @type {any} */ (e).code ?? e}`);
+    throw new ConfigError(`cannot create config ${def}: ${/** @type {any} */ (e).code}`);
   }
   try {
     if (posix) fs.fchmodSync(fd, 0o600);
@@ -91,7 +93,7 @@ export function ensureStarterConfig(file, home = os.homedir()) {
     // Never leave a half-written file that the next start would report as invalid JSON.
     fs.closeSync(fd);
     try { fs.rmSync(def, { force: true }); } catch { /* best effort */ }
-    throw new ConfigError(`cannot write config ${def}: ${/** @type {any} */ (e).code ?? e}`);
+    throw new ConfigError(`cannot write config ${def}: ${/** @type {any} */ (e).code}`);
   }
   fs.closeSync(fd);
   return true;
@@ -451,7 +453,7 @@ export function checkDirPermissions(file, dir) {
   try {
     st = fs.statSync(dir);
   } catch (e) {
-    throw new ConfigError(`cannot check the directory of config ${file}: ${/** @type {any} */ (e).code ?? e}`);
+    throw new ConfigError(`cannot check the directory of config ${file}: ${/** @type {any} */ (e).code}`);
   }
   if (st.mode & 0o022) {
     throw new ConfigError(
@@ -481,7 +483,7 @@ export function loadConfig(file) {
     // O_NONBLOCK: opening a FIFO must not hang startup; it is refused below as not a regular file.
     fd = fs.openSync(file, posix ? fs.constants.O_RDONLY | fs.constants.O_NONBLOCK : 'r');
   } catch (e) {
-    throw new ConfigError(`cannot read config ${file}: ${/** @type {any} */ (e).code ?? e}. Create it (see examples/servers.json) or pass --config <path>.`);
+    throw new ConfigError(`cannot read config ${file}: ${/** @type {any} */ (e).code}. Create it (see examples/servers.json) or pass --config <path>.`);
   }
   let text;
   try {
@@ -496,7 +498,7 @@ export function loadConfig(file) {
     try {
       text = fs.readFileSync(fd, 'utf8');
     } catch (e) {
-      throw new ConfigError(`cannot read config ${file}: ${/** @type {any} */ (e).code ?? e}`);
+      throw new ConfigError(`cannot read config ${file}: ${/** @type {any} */ (e).code}`);
     }
   } finally {
     fs.closeSync(fd);

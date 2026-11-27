@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { CLI, IS_WINDOWS, tmpdir, writeConfig } from './helpers.js';
-import { computeAdditions } from '../src/rename-permissions.js';
+import { computeAdditions, runRenamePermissions } from '../src/rename-permissions.js';
 
 const settings = {
   model: 'example',
@@ -151,4 +151,84 @@ test('a JSON syntax error in settings.json does not echo its contents', () => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /not valid JSON.*line 1, column 23/);
   assert.ok(!r.stderr.includes('SECRET') && !r.stderr.includes('sk_live') && !r.stderr.includes('TOKEN'), r.stderr);
+});
+
+test('computeAdditions: no settings, a twin over the length limit, and a twin that would match enable_confirm', () => {
+  for (const empty of [null, {}, { permissions: null }]) {
+    assert.deepEqual(computeAdditions(empty), { additions: { allow: [], ask: [], deny: [] }, skipped: [] });
+  }
+  const long = `mcp__example-files__${'x'.repeat(128)}`;
+  assert.deepEqual(computeAdditions({ permissions: { deny: [long] } }).skipped, [
+    { list: 'deny', rule: long, reason: 'the patchbay name would exceed 128 characters' },
+  ]);
+  // No configured segment can do this (they never hold "(" or "*"); a caller's segmentFor can,
+  // and the guard keeps such a twin from ever approving enable_confirm.
+  for (const segment of ['enable_confirm(', 'enable_*(']) {
+    const r = computeAdditions({ permissions: { allow: ['mcp__example-files'] } }, { segmentFor: () => segment });
+    assert.deepEqual(r.additions.allow, [], segment);
+    assert.deepEqual(r.skipped, [{ list: 'allow', rule: 'mcp__example-files', reason: 'its patchbay twin would match enable_confirm' }], segment);
+  }
+});
+
+test('CLI usage errors exit 64: an unknown flag, a second settings file, no settings file', () => {
+  for (const args of [['settings.json', '--bogus'], ['a.json', 'b.json'], [], ['--write']]) {
+    const r = spawnSync(process.execPath, [CLI, 'rename-permissions', ...args], { encoding: 'utf8', env: noConfig() });
+    assert.equal(r.status, 64, args.join(' '));
+  }
+  const unknown = spawnSync(process.execPath, [CLI, 'rename-permissions', 'a.json', 'b.json'], { encoding: 'utf8', env: noConfig() });
+  assert.match(unknown.stderr, /^rename-permissions: unknown argument b\.json$/m);
+  const none = spawnSync(process.execPath, [CLI, 'rename-permissions'], { encoding: 'utf8', env: noConfig() });
+  assert.match(none.stderr, /^Usage: mcp-patchbay rename-permissions /);
+});
+
+test('CLI: an invalid config exits 78, and only the default one gets the --config hint', () => {
+  const dir = tmpdir();
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, '{}');
+  const cfg = writeConfig(dir, { version: 2, servers: {} });
+  const explicit = spawnSync(process.execPath, [CLI, 'rename-permissions', file, '--config', cfg], { encoding: 'utf8', env: noConfig() });
+  assert.equal(explicit.status, 78);
+  assert.match(explicit.stderr, /version must be 1\n$/);
+  const viaEnv = spawnSync(process.execPath, [CLI, 'rename-permissions', file], { encoding: 'utf8', env: { ...noConfig(), MCP_PATCHBAY_CONFIG: cfg } });
+  assert.equal(viaEnv.status, 78);
+  assert.match(viaEnv.stderr, /version must be 1 \(pass --config <servers\.json> to use another file\)\n$/);
+});
+
+test('CLI: a settings file that cannot be read exits 1 with its error code', () => {
+  const dir = tmpdir();
+  const missing = path.join(dir, 'missing.json');
+  const r = spawnSync(process.execPath, [CLI, 'rename-permissions', missing], { encoding: 'utf8', env: noConfig() });
+  assert.equal(r.status, 1);
+  assert.equal(r.stderr.split('\n').filter((l) => l.startsWith('rename-permissions: cannot read'))[0], `rename-permissions: cannot read ${missing}: ENOENT`);
+});
+
+test('CLI --write keeps a compact file compact, without a trailing newline it did not have, and maps unknown servers as-is', () => {
+  const dir = tmpdir();
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, '{"permissions":{"allow":["mcp__example-other__read"],"deny":[]}}');
+  const cfg = writeConfig(dir, { version: 1, servers: { 'example-files': { command: 'x', prefix: 'files' } } });
+  const r = spawnSync(process.execPath, [CLI, 'rename-permissions', file, '--write', '--config', cfg], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), [
+    '{',
+    '  "permissions": {',
+    '    "allow": [',
+    '      "mcp__example-other__read",',
+    '      "mcp__patchbay__example-other__read"',
+    '    ],',
+    '    "deny": []',
+    '  }',
+    '}',
+  ].join('\n'));
+});
+
+test('a config that fails to load for a reason other than its content is not reported as a config error', async (t) => {
+  const dir = tmpdir();
+  const file = path.join(dir, 'settings.json');
+  fs.writeFileSync(file, '{}');
+  const cfg = writeConfig(dir, { version: 1, servers: {} });
+  const eio = Object.assign(new Error('EIO: i/o error, fstat'), { code: 'EIO' });
+  const fstat = mock.method(fs, 'fstatSync', () => { throw eio; });
+  t.after(() => fstat.mock.restore());
+  await assert.rejects(runRenamePermissions([file, '--config', cfg]), (e) => e === eio);
 });
