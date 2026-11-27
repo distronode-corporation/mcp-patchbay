@@ -57,12 +57,10 @@ export function commandLineOf(pid) {
 export function commandLineOfAsync(pid) {
   if (process.platform === 'linux' || !Number.isInteger(pid) || pid <= 0) return Promise.resolve(commandLineOf(pid));
   const c = commandLineQuery(pid);
+  // execFile reports every failure (ps or PowerShell missing, a timeout) to the callback; it
+  // throws only for invalid arguments, and these are fixed.
   return new Promise((resolve) => {
-    try {
-      execFile(c.file, c.args, c.opts, (err, out) => resolve(err ? null : String(out).trim() || null));
-    } catch {
-      resolve(null);
-    }
+    execFile(c.file, c.args, c.opts, (err, out) => resolve(err ? null : String(out).trim() || null));
   });
 }
 
@@ -131,14 +129,11 @@ export function pidAlive(pid) {
 export function killTree(pid, signal = 'SIGTERM', o = {}) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   if (IS_WINDOWS) {
-    try {
-      const k = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { detached: true, stdio: 'ignore', windowsHide: true });
-      k.on('error', () => {});
-      k.unref();
-      return true;
-    } catch {
-      return false;
-    }
+    // spawn reports a missing taskkill through 'error'; it throws only for invalid arguments.
+    const k = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { detached: true, stdio: 'ignore', windowsHide: true });
+    k.on('error', () => {});
+    k.unref();
+    return true;
   }
   try {
     process.kill(-pid, signal);
@@ -186,11 +181,11 @@ setTimeout(() => {
  */
 export function killGroupsLater(items, delayMs = SHUTDOWN_KILL_DELAY_MS) {
   if (IS_WINDOWS || !items.length) return;
-  try {
-    const h = spawn(process.execPath, ['-e', KILL_HELPER, String(delayMs), JSON.stringify(items)], { detached: true, stdio: 'ignore' });
-    h.on('error', () => {});
-    h.unref();
-  } catch { /* the reaper of the next start is the fallback */ }
+  // A failed spawn is reported through 'error' (the reaper of the next start is the fallback);
+  // spawn throws only for invalid arguments, and these are node itself and two strings.
+  const h = spawn(process.execPath, ['-e', KILL_HELPER, String(delayMs), JSON.stringify(items)], { detached: true, stdio: 'ignore' });
+  h.on('error', () => {});
+  h.unref();
 }
 
 /** How long the reaper waits after SIGTERM before it sends SIGKILL. */
@@ -206,8 +201,8 @@ export function processGroupOf(pid) {
   if (process.platform === 'linux') return procStat(pid)?.pgid ?? null;
   try {
     const out = execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 });
-    const g = Number(out.trim());
-    return Number.isInteger(g) && g > 0 ? g : null;
+    // ps prints the group id of a live process, or exits non-zero (a pid it cannot show).
+    return Number(out.trim());
   } catch {
     return null;
   }
