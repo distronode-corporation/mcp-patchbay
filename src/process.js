@@ -127,19 +127,25 @@ export function pidAlive(pid) {
  * Windows: a detached, unref'd `taskkill /T /F /PID` (it outlives us if we exit next).
  * @param {number} pid
  * @param {NodeJS.Signals} [signal]
- * @param {{bare?: boolean}} [o] bare: false never falls back to signalling the bare pid. The
- *   fallback is only safe for a child we have not reaped yet (its pid cannot be reused); post-exit
- *   cleanup and the reaper pass false.
+ * @param {{bare?: boolean, spawn?: typeof spawn}} [o] bare: false never falls back to signalling
+ *   the bare pid. The fallback is only safe for a child we have not reaped yet (its pid cannot be
+ *   reused); post-exit cleanup and the reaper pass false. spawn: what starts taskkill on Windows
+ *   (default: node's spawn).
  * @returns {boolean} whether anything was signalled
  */
 export function killTree(pid, signal = 'SIGTERM', o = {}) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   if (IS_WINDOWS) {
-    // spawn reports a missing taskkill through 'error'; it throws only for invalid arguments.
-    const k = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { detached: true, stdio: 'ignore', windowsHide: true });
-    k.on('error', () => {});
-    k.unref();
-    return true;
+    // spawn reports a missing taskkill through 'error', but throws others (EPERM, for a launch
+    // Windows denies).
+    try {
+      const k = (o.spawn ?? spawn)('taskkill', ['/T', '/F', '/PID', String(pid)], { detached: true, stdio: 'ignore', windowsHide: true });
+      k.on('error', () => {});
+      k.unref();
+      return true;
+    } catch {
+      return false;
+    }
   }
   try {
     process.kill(-pid, signal);

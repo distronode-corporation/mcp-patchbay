@@ -242,3 +242,8 @@ test('a kill list too long for one argument is left to the next start\'s reaper'
   const items = Array.from({ length: 40000 }, () => ({ pid: GONE, start: '1', file: '/nonexistent/pidfile.json' }));
   assert.doesNotThrow(() => killGroupsLater(items));
 });
+
+test('a taskkill launch that Windows refuses outright signals nothing', { skip: !IS_WINDOWS && 'taskkill is used on Windows only' }, () => {
+  const refuse = () => { throw Object.assign(new Error('spawn EPERM'), { code: 'EPERM', syscall: 'spawn taskkill' }); };
+  assert.equal(killTree(GONE, 'SIGTERM', { spawn: /** @type {any} */ (refuse) }), false);
+});
