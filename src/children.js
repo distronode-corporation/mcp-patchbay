@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Child MCP servers: a custom stdio transport, spawn specs for stdio and remote (mcp-remote)
 // children, and the per-child SDK Client. See SPEC.md §7 and §8.
 import { spawn } from 'node:child_process';

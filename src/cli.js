@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // mcp-patchbay command line. With no subcommand it serves MCP over stdio.
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ConfigError, EX_CONFIG, ensureStarterConfig, loadConfig, resolveConfigPath } from './config.js';

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // First run with no config: the default location gets a private starter config and the
 // patchbay serves with zero servers. An explicit path that is missing is still an error.
 import { test } from 'node:test';

@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# SPDX-FileCopyrightText: Distronode Corporation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """write-gate: an example Claude Code hook that asks once per session before a tool call whose
 input names a configured "write identity" (an account, a bot user, a production project...).
 

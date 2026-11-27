@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Small file helpers shared by import and rename-permissions.
 import fs from 'node:fs';
 import path from 'node:path';

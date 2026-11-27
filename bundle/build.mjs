@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Builds the Claude Desktop extension bundle, dist/mcp-patchbay-<version>.mcpb.
 //
 // It stages the package as npm would publish it (package.json's `files`), plus the bundle's

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // The public naming contract: how a child's tool name becomes the name the client sees.
 // See SPEC.md §4 and README "Naming contract".
 import { ToolSchema } from '@modelcontextprotocol/sdk/types.js';

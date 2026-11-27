@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Distronode Corporation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // `mcp-patchbay import`: build servers.json from a Claude Code config. See SPEC.md §10.
 import fs from 'node:fs';
 import path from 'node:path';
