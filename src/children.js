@@ -137,6 +137,9 @@ export class ChildProcessTransport {
     /** @type {(() => void) | undefined} */ this.onclose = undefined;
     /** @type {Promise<void>} */
     this.exitPromise = new Promise((r) => { this.resolveExit = r; });
+    /** Settles once the child's pipes have closed, so every stderr line has been read. */
+    /** @type {Promise<void>} */
+    this.stdioClosed = new Promise((r) => { this.resolveStdio = r; });
   }
 
   async start() {
@@ -167,6 +170,7 @@ export class ChildProcessTransport {
       proc.on('error', (err) => {
         this.exited = true;
         this.resolveExit?.();
+        this.resolveStdio?.();
         reject(err);
         this.#finish();
       });
@@ -179,7 +183,10 @@ export class ChildProcessTransport {
         o.onExit?.(this.exitInfo);
         this.resolveExit?.();
       });
-      proc.on('close', () => this.#finish());
+      proc.on('close', () => {
+        this.resolveStdio?.();
+        this.#finish();
+      });
       proc.stdout?.setEncoding('utf8');
       proc.stdout?.on('data', (chunk) => this.#onStdout(chunk));
       proc.stdout?.on('error', () => {});
@@ -491,6 +498,15 @@ export class Child extends EventEmitter {
     } catch (e) {
       this.o.log.debug(`[${this.entry.name}] roots list_changed not sent: ${/** @type {Error} */ (e).message}`);
     }
+  }
+
+  /**
+   * Waits until the child's pipes have closed, or `ms` at most (a grandchild may hold them).
+   * A child that dies mid-handshake can fail our write (EPIPE) before its stderr is read.
+   * @param {number} ms
+   */
+  async settled(ms) {
+    await Promise.race([this.transport?.stdioClosed, new Promise((r) => setTimeout(r, ms).unref?.())]);
   }
 
   stderrTail(n = 5) {
