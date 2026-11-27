@@ -156,6 +156,8 @@ export class ChildProcessTransport {
           detached: !IS_WINDOWS,
         });
       } catch (e) {
+        // No pipes were opened, so none will close: a settled() wait must not hang on them.
+        this.resolveStdio?.();
         reject(e);
         return;
       }

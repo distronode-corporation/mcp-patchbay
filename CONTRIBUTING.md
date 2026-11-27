@@ -19,6 +19,9 @@ New here? Issues labelled [good first issue](https://github.com/distronode-corpo
 
 ## Setup
 
+The patchbay runs on Node 22 or later; working on it needs Node 22.12 or later, which c8
+(the coverage tool) requires.
+
 ```sh
 npm ci
 npm run lint
