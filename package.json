@@ -43,7 +43,7 @@
   "scripts": {
     "lint": "oxlint --deny-warnings",
     "test": "node --test --throw-deprecation --test-reporter=spec \"test/**/*.test.js\"",
-    "test:coverage": "node --test --throw-deprecation --test-reporter=spec --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=94 --test-coverage-branches=82 --test-coverage-functions=86 \"test/**/*.test.js\""
+    "test:coverage": "c8 --check-coverage=false node --test --throw-deprecation --test-reporter=spec \"test/**/*.test.js\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
@@ -51,7 +51,14 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "c8": "12.0.0",
     "fast-check": "4.10.2",
     "oxlint": "1.93.0"
+  },
+  "overrides": {
+    "test-exclude": {
+      "glob": "14.0.3",
+      "minimatch": "11.0.3"
+    }
   }
 }

@@ -41,14 +41,21 @@ jobs:
       # oxlint's correctness rules (.oxlintrc.json), warnings included. In every test job, so it
       # is part of the required checks.
       - run: npm run lint
-      # Linux measures coverage and fails below the floors in package.json's test:coverage
-      # (lines 94, branches 82, functions 86: what the suite reaches today, rounded down).
-      # Other systems take other platform branches (no Linux start times on macOS, taskkill
-      # and skipped signal tests on Windows), so they run the same suite unmeasured.
-      - if: matrix.os == 'ubuntu-24.04'
-        run: npm run test:coverage
-      - if: matrix.os != 'ubuntu-24.04'
-        run: npm test
+      # Every leg records V8 coverage while the suite runs and keeps what it recorded for src/.
+      # Each system takes its own platform branches (Linux start times, ps on macOS, taskkill
+      # on Windows), so no one leg covers src/: the `coverage` job merges all six and holds
+      # the floors in .c8rc.json.
+      - run: npm test
+        env:
+          NODE_V8_COVERAGE: ${{ runner.temp }}/v8-raw
+      - run: node scripts/v8-coverage.mjs collect "$RUNNER_TEMP/v8-raw" "$RUNNER_TEMP/v8-src"
+        shell: bash
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: v8-coverage-${{ matrix.os }}-node${{ matrix.node }}
+          path: ${{ runner.temp }}/v8-src
+          if-no-files-found: error
+          retention-days: 7
       - run: npm pack --dry-run
       # The npm package is reproducible: there is no build step, and two packs of this commit
       # give the same tarball, byte for byte. The README says how to compare a release with
@@ -75,6 +82,43 @@ jobs:
           python-version: '3.12'
       - name: write-gate example tests
         run: python -m unittest discover -s examples/write-gate -v
+
+  # Coverage of src/ across every test leg: each leg's V8 coverage, put together and checked
+  # by c8 against the floors in .c8rc.json. Every leg is named, and a leg that uploaded nothing
+  # fails the merge, so partial data can never pass.
+  coverage:
+    name: coverage (all systems)
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: v8-coverage-*
+          path: ${{ runner.temp }}/legs
+      - name: Merge every leg
+        run: |
+          set -euo pipefail
+          legs=()
+          for os in ubuntu-24.04 macos-15 windows-2025; do
+            for node in 22 24; do legs+=("$RUNNER_TEMP/legs/v8-coverage-$os-node$node"); done
+          done
+          node scripts/v8-coverage.mjs merge "$RUNNER_TEMP/v8-merged" "${legs[@]}"
+      - name: Coverage meets the floors
+        run: npx c8 report --temp-directory "$RUNNER_TEMP/v8-merged"
 
   # The Claude Desktop extension bundle: built from this tree with the pinned MCPB CLI
   # (bundle/build.mjs runs `mcpb validate`, then `mcpb pack`), and kept as an artifact for the

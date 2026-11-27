@@ -19,11 +19,14 @@ New here? Issues labelled [good first issue](https://github.com/distronode-corpo
 
 ## Setup
 
+The patchbay runs on Node 22 or later; working on it needs Node 22.12 or later, which c8
+(the coverage tool) requires.
+
 ```sh
 npm ci
 npm run lint
 npm test
-npm run test:coverage   # what CI runs on Linux: the suite with its coverage floors
+npm run test:coverage   # the suite under c8: this system's share of the coverage
 python3 -m unittest discover -s examples/write-gate -v
 ```
 
@@ -44,9 +47,13 @@ pull request.
 
 - A pull request that adds or changes functionality adds tests for it to the automated suite, and
   a bug fix adds a test that fails without the fix.
-- On Linux, CI runs `npm run test:coverage`, which fails below the floors in `package.json`
-  (lines 94%, branches 82%, functions 86% of `src/`). The floors only go up: never lower one or
-  exclude a file to get a change through.
+- Coverage of `src/` is 100% of lines, statements, branches and functions, per file, and CI
+  fails below it (the floors in `.c8rc.json`). Each system takes its own platform branches, so
+  no single run reaches 100: every CI test leg records V8 coverage
+  (`scripts/v8-coverage.mjs collect`), and the `coverage` job merges all six legs and checks
+  them with c8. `npm run test:coverage` shows your own system's share. A branch no system can
+  reach is dead code and is deleted; never lower a floor, exclude a file or add a coverage
+  pragma to get a change through.
 - The tests run with `--throw-deprecation`, so a call to a deprecated Node.js API fails them.
 - Tests that rely on POSIX process groups or signals are skipped on Windows, with a reason.
 - A flaky test is a bug. Fix the cause. Do not add retries or loosen assertions.

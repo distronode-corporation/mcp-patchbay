@@ -14,7 +14,12 @@ import {
   resolveConfigPath,
   autostartFor,
   ConfigError,
+  checkDirPermissions,
+  checkFilePermissions,
+  ensureStarterConfig,
+  expandHome,
   jsonErrorPosition,
+  jsonSyntaxMessage,
 } from '../src/config.js';
 import { CLI, POSIX_ONLY, tmpdir, writeConfig } from './helpers.js';
 
@@ -289,4 +294,118 @@ test('the CLI exits 78 for an invalid confirmVia', () => {
   const r = spawnSync(process.execPath, [CLI, 'doctor', '--config', p, '--no-start'], { encoding: 'utf8' });
   assert.equal(r.status, 78);
   assert.match(r.stderr, /confirmVia must be one of/);
+});
+
+test('validation refuses each wrong type at its own path', () => {
+  bad((c) => { c.servers = []; }, /^servers must be an object$/);
+  bad((c) => { c.servers['example-files'] = 'npx'; }, /^servers\.example-files must be an object$/);
+  bad((c) => { c.servers['example-files'].description = 7; }, /description must be a string/);
+  bad((c) => { c.servers['example-files'].description = 'x'.repeat(301); }, /description must be at most 300 characters/);
+  bad((c) => { c.servers['example-files'].command = ''; }, /command must be a non-empty string/);
+  bad((c) => { c.servers['example-files'].command = ['npx']; }, /command must be a non-empty string/);
+  bad((c) => { c.servers['example-files'].env = ['K=v']; }, /env must be an object of strings/);
+  bad((c) => { c.servers['example-remote'].url = 42; }, /url must be a string/);
+  bad((c) => { c.autostart = []; }, /^autostart must be an object$/);
+  bad((c) => { c.autostart.default = 'example-files'; }, /autostart\.default must be an array of server names/);
+  bad((c) => { c.autostart.default = [1]; }, /autostart\.default must be an array of server names/);
+  bad((c) => { c.autostart.projects = ['/path/to/project']; }, /autostart\.projects must be an object/);
+  bad((c) => { c.oauth = 'dir'; }, /^oauth must be an object$/);
+  bad((c) => { c.oauth.configDir = ''; }, /oauth\.configDir must be a path/);
+  bad((c) => { c.oauth.configDir = 5; }, /oauth\.configDir must be a path/);
+  bad((c) => { c.oauth.configDir = 'relative/oauth'; }, /oauth\.configDir must be absolute/);
+  assert.throws(() => validateConfig([]), /^ConfigError: the config must be a JSON object$|the config must be a JSON object/);
+  assert.throws(() => validateConfig(null), /the config must be a JSON object/);
+});
+
+test('a Windows-style absolute oauth.configDir is accepted on every system, and ~ alone is the home directory', () => {
+  const c = clone(good);
+  c.oauth.configDir = 'C:\\Users\\example\\oauth';
+  assert.equal(validateConfig(c).oauth.configDir, 'C:\\Users\\example\\oauth');
+  assert.equal(expandHome('~'), os.homedir());
+});
+
+test('jsonErrorPosition finds the offset of each kind of syntax error', () => {
+  assert.equal(jsonErrorPosition('{}'), -1);
+  assert.equal(jsonErrorPosition('[ ]'), -1);
+  assert.equal(jsonErrorPosition('{"a": "\\u00e9\\n"}'), -1);
+  assert.equal(jsonErrorPosition('"abc'), 4, 'an unterminated string fails at the end');
+  assert.equal(jsonErrorPosition('"abc\\'), 5, 'a backslash at the very end');
+  assert.equal(jsonErrorPosition('"\\x"'), 2, 'an unknown escape');
+  assert.equal(jsonErrorPosition('"\\u12g4"'), 2, 'a \\u escape without four hex digits');
+  assert.equal(jsonErrorPosition('{"a" 1}'), 5, 'a missing colon');
+});
+
+test('JSON too deeply nested to scan is still reported, without a position', () => {
+  const deep = '['.repeat(200000);
+  assert.equal(jsonErrorPosition(deep), -1);
+  assert.equal(jsonSyntaxMessage('config x.json', deep), 'config x.json is not valid JSON');
+});
+
+test('a config owned by root is accepted and one owned by another user is refused', { skip: POSIX_ONLY || (process.getuid?.() === 0 && 'root is the other user here') }, () => {
+  const dir = tmpdir();
+  const p = writeConfig(dir, { version: 1, servers: {} });
+  const st = fs.statSync(p);
+  const other = process.getuid() + 1;
+  assert.doesNotThrow(() => checkFilePermissions(p, Object.assign(st, { uid: 0 })));
+  assert.throws(() => checkFilePermissions(p, Object.assign(fs.statSync(p), { uid: other })), (e) => e instanceof ConfigError && new RegExp(`owned by uid ${other}, not by you`).test(e.message));
+});
+
+test('a config directory owned by root is accepted, one owned by another user or unreadable is refused', { skip: POSIX_ONLY || (process.getuid?.() === 0 && 'root is the other user here') }, (t) => {
+  const dir = tmpdir();
+  const p = writeConfig(dir, { version: 1, servers: {} });
+  const real = fs.statSync;
+  let uid = 0;
+  const stat = t.mock.method(fs, 'statSync', (f, ...rest) => (f === dir ? Object.assign(real(f, ...rest), { uid }) : real(f, ...rest)));
+  assert.doesNotThrow(() => checkDirPermissions(p, dir));
+  uid = process.getuid() + 1;
+  assert.throws(() => checkDirPermissions(p, dir), new RegExp(`directory .* is owned by uid ${uid}, not by you`));
+  stat.mock.restore();
+  assert.throws(() => checkDirPermissions(p, path.join(dir, 'gone')), (e) => e instanceof ConfigError && /cannot check the directory of config .*: ENOENT$/.test(e.message));
+});
+
+test('loadConfig reports a read error on the open file as a config error, with its code', (t) => {
+  const dir = tmpdir();
+  const p = writeConfig(dir, { version: 1, servers: {} });
+  t.mock.method(fs, 'readFileSync', () => { throw Object.assign(new Error('EIO: i/o error, read'), { code: 'EIO' }); });
+  assert.throws(() => loadConfig(p), (e) => e instanceof ConfigError && e.message === `cannot read config ${p}: EIO`);
+});
+
+test('ensureStarterConfig: a default path it cannot create the file in, and a write that fails, leave no file', { skip: POSIX_ONLY || (process.getuid?.() === 0 && 'root ignores directory modes') }, (t) => {
+  const home = tmpdir();
+  const dir = path.join(home, '.config', 'mcp-patchbay');
+  const def = path.join(dir, 'servers.json');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.chmodSync(dir, 0o500);
+  try {
+    assert.throws(() => ensureStarterConfig(def, home), (e) => e instanceof ConfigError && e.message === `cannot create config ${def}: EACCES`);
+  } finally {
+    fs.chmodSync(dir, 0o700);
+  }
+  const enospc = Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+  const write = t.mock.method(fs, 'writeFileSync', () => { throw enospc; });
+  assert.throws(() => ensureStarterConfig(def, home), (e) => e instanceof ConfigError && e.message === `cannot write config ${def}: ENOSPC`);
+  assert.equal(fs.existsSync(def), false, 'the half-written file is removed');
+  // Removing it can fail too; the write's error is still the one reported.
+  const rm = t.mock.method(fs, 'rmSync', () => { throw Object.assign(new Error('EACCES'), { code: 'EACCES' }); });
+  assert.throws(() => ensureStarterConfig(def, home), (e) => e instanceof ConfigError && e.message === `cannot write config ${def}: ENOSPC`);
+  assert.equal(rm.mock.callCount(), 1);
+  rm.mock.restore();
+  write.mock.restore();
+  fs.rmSync(def, { force: true });
+});
+
+test('ensureStarterConfig leaves a config that appears between its check and its create alone', (t) => {
+  const home = tmpdir();
+  const dir = path.join(home, '.config', 'mcp-patchbay');
+  const def = path.join(dir, 'servers.json');
+  const real = fs.lstatSync;
+  // Another process (a second patchbay starting at once) writes the file right after the check.
+  t.mock.method(fs, 'lstatSync', (f, ...rest) => {
+    if (f !== def) return real(f, ...rest);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(def, '{"version":1,"servers":{"theirs":{"command":"x"}}}', { mode: 0o600 });
+    throw Object.assign(new Error(`ENOENT: no such file or directory, lstat '${def}'`), { code: 'ENOENT' });
+  });
+  assert.equal(ensureStarterConfig(def, home), false);
+  assert.equal(fs.readFileSync(def, 'utf8'), '{"version":1,"servers":{"theirs":{"command":"x"}}}');
 });

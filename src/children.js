@@ -67,8 +67,8 @@ export function mcpRemoteBin(env = process.env) {
   const require = createRequire(import.meta.url);
   const pkgPath = require.resolve('mcp-remote/package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-  const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin['mcp-remote'];
-  return path.join(path.dirname(pkgPath), bin);
+  // The pinned mcp-remote declares bin as an object; a string bin would fail the tests here.
+  return path.join(path.dirname(pkgPath), pkg.bin['mcp-remote']);
 }
 
 /**
@@ -116,6 +116,7 @@ export class ChildProcessTransport {
    * @param {(raw: string) => void} [o.onStderrLine]
    * @param {(pid: number) => void} [o.onSpawn]
    * @param {(info: {code: number|null, signal: string|null}) => void} [o.onExit]
+   * @param {number} [o.maxLine] longest stdout line kept, in characters (default 64 MiB)
    */
   constructor(o) {
     this.o = o;
@@ -136,6 +137,9 @@ export class ChildProcessTransport {
     /** @type {(() => void) | undefined} */ this.onclose = undefined;
     /** @type {Promise<void>} */
     this.exitPromise = new Promise((r) => { this.resolveExit = r; });
+    /** Settles once the child's pipes have closed, so every stderr line has been read. */
+    /** @type {Promise<void>} */
+    this.stdioClosed = new Promise((r) => { this.resolveStdio = r; });
   }
 
   async start() {
@@ -152,26 +156,25 @@ export class ChildProcessTransport {
           detached: !IS_WINDOWS,
         });
       } catch (e) {
+        // No pipes were opened, so none will close: a settled() wait must not hang on them.
+        this.resolveStdio?.();
         reject(e);
         return;
       }
       this.proc = proc;
-      let spawned = false;
       proc.once('spawn', () => {
-        spawned = true;
         this.pid = /** @type {number} */ (proc.pid);
         o.onSpawn?.(this.pid);
         resolve(undefined);
       });
+      // 'error' after a spawn needs kill(), IPC or an abort signal, none of which is used here,
+      // so an error means the process never started.
       proc.on('error', (err) => {
-        if (!spawned) {
-          this.exited = true;
-          this.resolveExit?.();
-          reject(err);
-          this.#finish();
-        } else {
-          this.onerror?.(err);
-        }
+        this.exited = true;
+        this.resolveExit?.();
+        this.resolveStdio?.();
+        reject(err);
+        this.#finish();
       });
       proc.on('exit', (code, signal) => {
         this.exited = true;
@@ -182,7 +185,10 @@ export class ChildProcessTransport {
         o.onExit?.(this.exitInfo);
         this.resolveExit?.();
       });
-      proc.on('close', () => this.#finish());
+      proc.on('close', () => {
+        this.resolveStdio?.();
+        this.#finish();
+      });
       proc.stdout?.setEncoding('utf8');
       proc.stdout?.on('data', (chunk) => this.#onStdout(chunk));
       proc.stdout?.on('error', () => {});
@@ -195,8 +201,8 @@ export class ChildProcessTransport {
       });
       proc.stderr?.on('error', () => {});
       proc.stdin?.on('error', (err) => {
-        // EPIPE after the child died: report, never throw.
-        this.onerror?.(new Error(`stdin: ${/** @type {any} */ (err).code ?? err.message}`));
+        // EPIPE after the child died: report, never throw. Pipe errors always carry a code.
+        this.onerror?.(new Error(`stdin: ${/** @type {any} */ (err).code}`));
       });
     });
   }
@@ -210,7 +216,7 @@ export class ChildProcessTransport {
   /** @param {string} chunk */
   #onStdout(chunk) {
     this.outBuf += chunk;
-    if (this.outBuf.length > MAX_LINE && !this.outBuf.includes('\n')) {
+    if (this.outBuf.length > (this.o.maxLine ?? MAX_LINE) && !this.outBuf.includes('\n')) {
       this.noise.push(`[discarded ${this.outBuf.length} bytes without a newline]`);
       this.outBuf = '';
       return;
@@ -272,7 +278,8 @@ export class ChildProcessTransport {
   async close() {
     this.closing = true;
     if (this.proc && !this.exited) {
-      try { this.proc.stdin?.end(); } catch { /* ignore */ }
+      // end() on a pipe reports failures through the stream's 'error' event, never by throwing.
+      /** @type {import('node:stream').Writable} */ (this.proc.stdin).end();
       killTree(this.pid, 'SIGTERM');
       const t = setTimeout(() => { if (!this.exited) killTree(this.pid, 'SIGKILL'); }, KILL_GRACE_MS);
       t.unref?.();
@@ -495,6 +502,15 @@ export class Child extends EventEmitter {
     }
   }
 
+  /**
+   * Waits until the child's pipes have closed, or `ms` at most (a grandchild may hold them).
+   * A child that dies mid-handshake can fail our write (EPIPE) before its stderr is read.
+   * @param {number} ms
+   */
+  async settled(ms) {
+    await Promise.race([this.transport?.stdioClosed, new Promise((r) => setTimeout(r, ms).unref?.())]);
+  }
+
   stderrTail(n = 5) {
     return this.transport?.stderr.lines(n) ?? [];
   }
@@ -511,7 +527,8 @@ export class Child extends EventEmitter {
     await t.close();
     // Keep the pidfile of a child that has not been seen to exit, so the reaper can finish it.
     if (t.pid && t.exited) this.o.pidFiles?.remove(t.pid);
-    try { await this.client?.close(); } catch { /* already closed */ }
+    // Set with the transport in start(); closing it closes our transport, which never throws.
+    await /** @type {Client} */ (this.client).close();
   }
 
   /**

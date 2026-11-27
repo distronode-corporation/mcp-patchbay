@@ -62,7 +62,7 @@ test('non-string input is stringified', () => {
 });
 
 test('values String() cannot convert do not make redact throw', () => {
-  // cli.js passes whatever main() rejected with; String() throws for these.
+  // redact never throws, whatever it is given (its contract); String() throws for these.
   assert.equal(redact({ toString: 0 }), '[object Object]');
   assert.equal(redact(Object.create(null)), '[object Object]');
   const err = new Error('x');
@@ -96,4 +96,21 @@ test('redaction stays linear on long runs that look like the start of a url', ()
     assert.ok(Date.now() - t < 3000, `${s.slice(0, 8)}... took ${Date.now() - t} ms`);
   }
   assert.equal(redact('see https://h.example/p?key=abc and http://h.example/q'), `see https://h.example/p?[redacted] and http://h.example/q`);
+});
+
+test('a long base64-shaped run without upper case, lower case and digits all present survives', () => {
+  const words = 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz';
+  const digits = '1234567890123456789012345678901234567890123';
+  assert.equal(redact(`see ${words} here`), `see ${words} here`);
+  assert.equal(redact(`id ${words.toUpperCase()}${digits}`), `id ${words.toUpperCase()}${digits}`);
+  assert.equal(redact(`k ${words}A1`), 'k [redacted]');
+});
+
+test('secretsFor: a url that does not parse is still a secret whole, and a malformed escape is kept raw', () => {
+  assert.deepEqual(secretsFor({ url: 'not a url at all' }), ['not a url at all']);
+  const url = 'https://mcp.example.com/s/tok%E0%A4zz-value/mcp?key=a%ZZbcdef';
+  const out = secretsFor({ url });
+  assert.ok(out.includes('tok%E0%A4zz-value'), 'the segment as written, since it cannot be decoded');
+  assert.ok(out.includes('a%ZZbcdef'), 'the query value as written');
+  assert.equal(redact(`failed at ${url}`, out), 'failed at [redacted]');
 });

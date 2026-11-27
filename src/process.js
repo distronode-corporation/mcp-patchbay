@@ -15,9 +15,11 @@ const IS_WINDOWS = process.platform === 'win32';
 function userTag() {
   const uid = process.getuid?.();
   if (uid !== undefined) return String(uid);
-  let name = 'user';
-  try { name = os.userInfo().username; } catch { /* keep default */ }
-  return name.replace(/[^A-Za-z0-9_-]/g, '_') || 'user';
+  // Only Windows gets here. os.userInfo() throws when it cannot read the user's profile; a
+  // username it returns is never empty, and the replacement keeps its length.
+  let name;
+  try { name = os.userInfo().username; } catch { return 'user'; }
+  return name.replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 /**
@@ -57,6 +59,8 @@ export function commandLineOf(pid) {
 export function commandLineOfAsync(pid) {
   if (process.platform === 'linux' || !Number.isInteger(pid) || pid <= 0) return Promise.resolve(commandLineOf(pid));
   const c = commandLineQuery(pid);
+  // execFile reports most failures (ps or PowerShell missing, a timeout) to the callback, but
+  // throws others from spawn (ELOOP, for a symlink loop on PATH).
   return new Promise((resolve) => {
     try {
       execFile(c.file, c.args, c.opts, (err, out) => resolve(err ? null : String(out).trim() || null));
@@ -123,16 +127,19 @@ export function pidAlive(pid) {
  * Windows: a detached, unref'd `taskkill /T /F /PID` (it outlives us if we exit next).
  * @param {number} pid
  * @param {NodeJS.Signals} [signal]
- * @param {{bare?: boolean}} [o] bare: false never falls back to signalling the bare pid. The
- *   fallback is only safe for a child we have not reaped yet (its pid cannot be reused); post-exit
- *   cleanup and the reaper pass false.
+ * @param {{bare?: boolean, spawn?: typeof spawn}} [o] bare: false never falls back to signalling
+ *   the bare pid. The fallback is only safe for a child we have not reaped yet (its pid cannot be
+ *   reused); post-exit cleanup and the reaper pass false. spawn: what starts taskkill on Windows
+ *   (default: node's spawn).
  * @returns {boolean} whether anything was signalled
  */
 export function killTree(pid, signal = 'SIGTERM', o = {}) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   if (IS_WINDOWS) {
+    // spawn reports a missing taskkill through 'error', but throws others (EPERM, for a launch
+    // Windows denies).
     try {
-      const k = spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { detached: true, stdio: 'ignore', windowsHide: true });
+      const k = (o.spawn ?? spawn)('taskkill', ['/T', '/F', '/PID', String(pid)], { detached: true, stdio: 'ignore', windowsHide: true });
       k.on('error', () => {});
       k.unref();
       return true;
@@ -186,11 +193,13 @@ setTimeout(() => {
  */
 export function killGroupsLater(items, delayMs = SHUTDOWN_KILL_DELAY_MS) {
   if (IS_WINDOWS || !items.length) return;
+  // A failed launch is reported through 'error', or thrown from spawn (E2BIG, for a list too
+  // long for one argument). Either way the reaper of the next start is the fallback.
   try {
     const h = spawn(process.execPath, ['-e', KILL_HELPER, String(delayMs), JSON.stringify(items)], { detached: true, stdio: 'ignore' });
     h.on('error', () => {});
     h.unref();
-  } catch { /* the reaper of the next start is the fallback */ }
+  } catch { /* the next start reaps them */ }
 }
 
 /** How long the reaper waits after SIGTERM before it sends SIGKILL. */
@@ -206,8 +215,8 @@ export function processGroupOf(pid) {
   if (process.platform === 'linux') return procStat(pid)?.pgid ?? null;
   try {
     const out = execFileSync('ps', ['-o', 'pgid=', '-p', String(pid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 });
-    const g = Number(out.trim());
-    return Number.isInteger(g) && g > 0 ? g : null;
+    // ps prints the group id of a live process, or exits non-zero (a pid it cannot show).
+    return Number(out.trim());
   } catch {
     return null;
   }
