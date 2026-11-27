@@ -15,9 +15,9 @@ const IS_WINDOWS = process.platform === 'win32';
 function userTag() {
   const uid = process.getuid?.();
   if (uid !== undefined) return String(uid);
-  let name = 'user';
-  try { name = os.userInfo().username; } catch { /* keep default */ }
-  return name.replace(/[^A-Za-z0-9_-]/g, '_') || 'user';
+  // Only Windows has no getuid, and there os.userInfo() always names the signed-in user (never
+  // empty, and the replacement keeps its length).
+  return os.userInfo().username.replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 /**
