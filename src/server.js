@@ -581,6 +581,10 @@ export class Patchbay {
       : this.startTimeoutMs;
 
     const p = (async () => {
+      // The outcome is set in try or catch and returned after finally: with a return in both,
+      // V8 counts the unreachable code after the statement as a branch never taken.
+      /** @type {{ok: boolean, error?: string}} */
+      let result;
       try {
         await child.start(timeout);
         if (slot.child !== child) throw new Error('stopped');
@@ -594,7 +598,7 @@ export class Patchbay {
             .catch((e) => this.log.debug(`elicitation/complete not sent: ${e.message}`));
         }
         slot.lastNotify = this.notifyToolsChanged();
-        return { ok: true };
+        result = { ok: true };
       } catch (e) {
         if (slot.child === child) {
           const msg = slot.exitError?.() ?? this.#describeStartError(slot, child, e, timeout);
@@ -604,13 +608,15 @@ export class Patchbay {
           this.#unpublish(slot);
           this.log.warn(`${slot.name}: failed to start: ${msg}`);
           await child.close().catch(() => {});
-          return { ok: false, error: msg };
+          result = { ok: false, error: msg };
+        } else {
+          result = { ok: false, error: slot.lastError ?? 'disabled while starting' };
         }
-        return { ok: false, error: slot.lastError ?? 'disabled while starting' };
       } finally {
         /** @type {AbortController} */ (slot.startAbort).abort('start finished');
         slot.startPromise = null;
       }
+      return result;
     })();
     slot.startPromise = p;
     return p;
@@ -630,7 +636,7 @@ export class Patchbay {
     if (err.code === 'ENOENT') msg = 'could not start the command: not found (ENOENT)';
     else if (typeof err.code === 'string') msg = `could not start: ${err.code}`;
     else if (err instanceof McpError && err.code === ErrorCode.RequestTimeout) msg = `did not finish starting within ${Math.round(timeout / 1000)} s`;
-    else if (err instanceof McpError && err.code === ErrorCode.ConnectionClosed) msg = 'exited during startup';
+    // No "exited during startup" here: an unexpected exit sets slot.exitError, used instead.
     else msg = err.message.replace(/^MCP error -?\d+: /, '');
     const last = child.stderrTail(1)[0];
     if (last) msg += `; last stderr: ${last}`;
@@ -812,21 +818,21 @@ export class Patchbay {
       };
     }
     slot.inFlight++;
+    let result;
     try {
-      return await child.call(params, opts);
+      result = await child.call(params, opts);
     } catch (e) {
-      if (e instanceof McpError) {
-        if (e.code === ErrorCode.ConnectionClosed || child.transport?.exited) {
-          throw new McpError(ErrorCode.ConnectionClosed, `${slot.name} exited during the call`);
-        }
-        throw new McpError(e.code, redact(e.message.replace(/^MCP error -?\d+: /, ''), child.secrets), e.data);
-      }
-      if (child.transport?.exited) throw new McpError(ErrorCode.ConnectionClosed, `${slot.name} exited during the call`);
+      // The connection closes only after the child has exited (the transport closes on exit),
+      // so a ConnectionClosed error always comes with exited set.
+      const transport = /** @type {import('./children.js').ChildProcessTransport} */ (child.transport);
+      if (transport.exited) throw new McpError(ErrorCode.ConnectionClosed, `${slot.name} exited during the call`);
+      if (e instanceof McpError) throw new McpError(e.code, redact(e.message.replace(/^MCP error -?\d+: /, ''), child.secrets), e.data);
       // child.call rejects only with Errors (the SDK's, or the transport's write errors).
       throw new McpError(ErrorCode.InternalError, redact(/** @type {Error} */ (e).message, child.secrets));
     } finally {
       slot.inFlight--;
     }
+    return result;
   }
 
   // ---- autostart, instructions, shutdown -------------------------------------------------

@@ -137,6 +137,14 @@ test('a Child that never started has no pid, no noise, nothing to kill, and decl
   await child.close();
 });
 
+test('a Child given no client capabilities starts declaring none to its child', async (t) => {
+  const child = new Child({ entry: scriptedEntry({ SCRIPTED_PAGES: 'a' }), oauth: OAUTH, log: createLogger({ write: () => {} }) });
+  t.after(() => child.close());
+  await child.start(10000);
+  assert.deepEqual((await child.listTools(10000)).map((x) => x.name), ['a']);
+  assert.deepEqual(child.childCapabilities(), {});
+});
+
 test('a configured cwd that does not exist is refused before spawning', async () => {
   const dir = tmpdir();
   const { child } = childOf(scriptedEntry({}, { cwd: path.join(dir, 'gone') }));
@@ -179,7 +187,7 @@ test('a protocol error from the child is logged at debug level, with the server 
   t.after(() => child.close());
   await child.start(10000);
   await until(() => lines.some((l) => l.includes('client error')));
-  assert.ok(lines.some((l) => /^\[mcp-patchbay\] debug: \[scripted\] client error: /.test(l)), lines.join(''));
+  assert.ok(lines.some((l) => l.startsWith('[mcp-patchbay] debug: [scripted] client error: ')), lines.join(''));
 });
 
 test('rootsListChanged notifies a running child, and only logs when the child is gone', async () => {
