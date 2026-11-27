@@ -20,9 +20,8 @@ propose a new one.
   128-character check assume the shorter `mcp__patchbay__` prefix of a server added by hand
   (`plugins/claude-code/README.md`, "Tool names and permissions"). Until they handle both, the
   plugin's README says to register the server by hand if you rely on them.
-- **Coverage.** CI fails below the coverage floors in `package.json`'s `test:coverage` script
-  (lines 94%, branches 82%, functions 86% of `src/`). The aim is 100% on every metric, as mcp-frontdesk already enforces,
-  with the floor raised in the same pull request that reaches it.
+- **Coverage.** Keep `src/` at 100% of lines, statements, branches and functions, merged across
+  the Linux, macOS and Windows test legs, with CI failing below it (`.c8rc.json`).
 - **Windows.** CI runs the suite on Windows, but the author has not used the patchbay there,
   and the README's "Known limits" lists what differs (no config permission checks, no process
   groups, `.cmd` shims, the skipped signal tests).

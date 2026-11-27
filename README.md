@@ -468,7 +468,7 @@ The full policy, with the contact, is [PRIVACY.md](PRIVACY.md).
 npm ci
 npm run lint                                # oxlint
 npm test                                    # node:test, about 30 s
-npm run test:coverage                       # the same, with the coverage floors CI enforces
+npm run test:coverage                       # the same, with this system's share of the coverage
 python3 -m unittest discover -s examples/write-gate -v
 ```
 
