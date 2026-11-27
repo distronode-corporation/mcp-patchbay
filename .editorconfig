@@ -22,3 +22,9 @@ trim_trailing_whitespace = false
 indent_style = unset
 indent_size = unset
 trim_trailing_whitespace = unset
+
+# The licence texts REUSE keeps in LICENSES/, verbatim like LICENSE.
+[LICENSES/**]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = unset
