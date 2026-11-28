@@ -47,7 +47,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
-    "mcp-remote": "0.15.2",
+    "mcp-remote": "0.16.6",
     "zod": "4.6.7"
   },
   "devDependencies": {
