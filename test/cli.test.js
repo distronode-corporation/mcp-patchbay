@@ -13,6 +13,7 @@ import { CLI, POSIX_ONLY, ROOT, tmpdir, writeConfig } from './helpers.js';
 import { VERSION } from '../src/version.js';
 
 const FSTAT_EIO = pathToFileURL(path.join(ROOT, 'test', 'fixtures', 'fstat-eio.mjs')).href;
+const READDIR_NOT_A_LIST = pathToFileURL(path.join(ROOT, 'test', 'fixtures', 'readdir-not-a-list.mjs')).href;
 
 /** The CLI with `args`, stdin closed at once, and a private runtime dir. */
 function cli(args, o = {}) {
@@ -72,15 +73,24 @@ test('a config load failure that is not about the config exits 1 with the redact
   assert.match(r.stderr, /^mcp-patchbay: Error: EIO: i\/o error, fstat\n\s+at /);
 });
 
-test('a pidfile the reaper cannot read as a record is logged, and serving goes on', { skip: POSIX_ONLY }, () => {
+test('a pidfile holding JSON that is not a record is skipped, and serving goes on', { skip: POSIX_ONLY }, () => {
   const dir = tmpdir();
   const p = writeConfig(dir, { version: 1, servers: {} });
   const pidDir = path.join(dir, `mcp-patchbay-${process.getuid?.() ?? 'user'}`);
   fs.mkdirSync(pidDir, { mode: 0o700 });
   fs.chmodSync(pidDir, 0o700);
-  // Valid JSON that is not an object: reading its owner throws, which stops this reap.
+  // Valid JSON that is not an object (issue #37): it used to stop the whole reap.
   fs.writeFileSync(path.join(pidDir, '1-2.json'), 'null');
   const r = cli(['--config', p], { dir });
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stderr, /reaping leftovers failed/);
+  assert.match(r.stderr, /serving 0 server\(s\)/);
+});
+
+test('a reap that fails anyway is logged, and serving goes on', { skip: POSIX_ONLY }, () => {
+  const dir = tmpdir();
+  const p = writeConfig(dir, { version: 1, servers: {} });
+  const r = cli(['--config', p], { dir, node: ['--import', READDIR_NOT_A_LIST] });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stderr, /warn: reaping leftovers failed: /);
   assert.match(r.stderr, /serving 0 server\(s\)/);

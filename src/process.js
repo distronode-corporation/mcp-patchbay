@@ -356,6 +356,8 @@ export class PidFiles {
       } catch {
         continue;
       }
+      // Valid JSON that is not a record (null, a number, a list) is as unreadable as a parse error.
+      if (rec === null || typeof rec !== 'object' || Array.isArray(rec)) continue;
       const owner = Number(rec.owner);
       const pid = Number(rec.pid);
       if (owner === process.pid || pidAlive(owner)) continue;
