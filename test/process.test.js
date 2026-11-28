@@ -206,6 +206,21 @@ test('the reaper skips what is not a pidfile of a dead patchbay, and copes with 
   assert.equal(pf.reap(), 0, 'a directory removed since startup');
 });
 
+test('pidfiles holding JSON that is not a record are skipped, and a leftover after them is still reaped (#37)', { skip: POSIX_ONLY }, async (t) => {
+  const { pf, dir } = pidFiles();
+  for (const [i, text] of ['null', '42', '"x"', 'true', '[]'].entries()) fs.writeFileSync(path.join(dir, `${GONE}-${i + 1}.json`), text);
+  const child = sleeper(t, { detached: true });
+  await new Promise((r) => child.once('spawn', r));
+  const exited = new Promise((r) => child.once('exit', r));
+  const cmd = /** @type {string} */ (commandLineOf(child.pid));
+  fs.writeFileSync(path.join(dir, `${GONE}-${child.pid}.json`), JSON.stringify({ owner: GONE, pid: child.pid, cmd: hashCommandLine(cmd), start: processStartTime(child.pid) }));
+  assert.equal(pf.reap(100), 1);
+  await exited;
+  // Skipped like unreadable JSON: left in place, not judged.
+  await until(() => !fs.existsSync(path.join(dir, `${GONE}-${child.pid}.json`)));
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['1', '2', '3', '4', '5'].map((n) => `${GONE}-${n}.json`).sort());
+});
+
 test('a leftover reaped while its directory turns read-only is still killed', { skip: POSIX_ONLY || ROOT_IGNORES_MODES }, async (t) => {
   const { pf, dir } = pidFiles();
   const child = sleeper(t, { detached: true });
